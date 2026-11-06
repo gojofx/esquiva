@@ -321,7 +321,15 @@ const server = http.createServer((req, res) => {
     res.writeHead(403).end();
     return;
   }
-  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) file = path.join(DIST, "index.html");
+  if (!fs.existsSync(file) || fs.statSync(file).isDirectory()) {
+    // Un archivo que no existe (p. ej. un JS de una compilación anterior) es 404:
+    // devolver la página en su lugar provoca "Expected a JavaScript module script… MIME type text/html".
+    if (path.extname(url.pathname) || url.pathname.includes("/assets/")) {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" }).end("No encontrado");
+      return;
+    }
+    file = path.join(DIST, "index.html"); // rutas de la app: /, /profesor
+  }
   fs.readFile(file, (err, buf) => {
     if (err) {
       res.writeHead(500, { "Content-Type": "text/plain; charset=utf-8" }).end("Falta compilar: ejecuta npm run build");
