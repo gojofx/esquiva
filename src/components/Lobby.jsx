@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import Setup from "./Setup.jsx";
 import Claims from "./Claims.jsx";
 
-export const studentUrl = () => window.location.origin + window.location.pathname;
+import { studentUrl } from "../paths.js";
 
 function QR({ url }) {
   const [src, setSrc] = useState(null);

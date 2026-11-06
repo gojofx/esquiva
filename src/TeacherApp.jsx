@@ -6,6 +6,7 @@ import Lobby from "./components/Lobby.jsx";
 import Play from "./components/Play.jsx";
 import Scoreboard from "./components/Scoreboard.jsx";
 import { DEFAULT_POINTS } from "./game/engine.js";
+import { BASE, navigate } from "./paths.js";
 
 const PIN_KEY = "ruleta-profesor-pin";
 const TABS = [
@@ -33,7 +34,17 @@ function Login({ onPin, failed }) {
         </div>
         {failed && <div className="warnbar">PIN incorrecto.</div>}
         <button className="btn" type="submit" disabled={!pin.trim()}>Entrar</button>
-        <a href="#" className="muted" style={{ fontSize: 14 }}>Soy estudiante</a>
+        <a
+          href={BASE}
+          className="muted"
+          style={{ fontSize: 14 }}
+          onClick={(e) => {
+            e.preventDefault();
+            navigate(BASE);
+          }}
+        >
+          Soy estudiante
+        </a>
       </form>
     </main>
   );

@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-
-const wsUrl = () => {
-  const u = new URL("ws", window.location.href);
-  u.hash = "";
-  u.search = "";
-  u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
-  return u.toString();
-};
+import { wsUrl } from "./paths.js";
 
 // Conexión con reconexión automática. hello() da el primer mensaje al conectar.
 export function useSocket(hello, onMessage, enabled = true) {

@@ -365,7 +365,7 @@ setInterval(() => {
 
 server.listen(PORT, HOST, () => {
   console.log(`Ruleta de Asientos en http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
-  console.log(`  Estudiantes: /            Profesor: /#profesor`);
+  console.log(`  Estudiantes: /            Profesor: /profesor`);
   console.log(`  Datos: ${storage.describe}`);
   console.log(`  PIN del profesor: ${PIN}${process.env.PROFESOR_PIN ? " (de PROFESOR_PIN)" : ` (guardado en ${path.join(DATA_DIR, "pin.txt")})`}`);
 });

@@ -12,15 +12,16 @@ import "@fontsource/jetbrains-mono/700.css";
 import "./styles.css";
 import TeacherApp from "./TeacherApp.jsx";
 import StudentApp from "./StudentApp.jsx";
+import { isTeacherPath, migrateHash } from "./paths.js";
 
-const isTeacher = () => window.location.hash.replace("#", "").startsWith("profesor");
+migrateHash();
 
 function Root() {
-  const [teacher, setTeacher] = useState(isTeacher);
+  const [teacher, setTeacher] = useState(isTeacherPath);
   useEffect(() => {
-    const f = () => setTeacher(isTeacher());
-    window.addEventListener("hashchange", f);
-    return () => window.removeEventListener("hashchange", f);
+    const f = () => setTeacher(isTeacherPath());
+    window.addEventListener("popstate", f);
+    return () => window.removeEventListener("popstate", f);
   }, []);
   return teacher ? <TeacherApp /> : <StudentApp />;
 }

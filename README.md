@@ -9,7 +9,7 @@ Funciona en un servidor propio: un proceso Node sirve la página y comunica en t
 | Dirección | Quién | Qué hace |
 |---|---|---|
 | `/` | Estudiantes | Se inscriben con su nombre (queda guardado en el celular hasta el final) y **eligen el asiento donde están sentados**. En cada ronda ven la pista, envían el resultado (número, lista o apuesta), pueden **no responder** o declararse **"¡Fui el primero!"**; lo enviado queda bloqueado. Durante el tiempo indican **a qué asiento se van a pasar**: el compañero de ese asiento acepta o rechaza en su celular y el cambio queda registrado. Ven sus puntos y el resultado de cada ronda. |
-| `/#profesor` | Profesor (pide PIN) | Reglas de la partida, sala de inscripción con QR, asientos (corrige o asigna a quien no tiene celular), ruleta, solicitudes de cambio, respuestas calificadas automáticamente (se pueden corregir), marcador, deshacer ronda. |
+| `/profesor` | Profesor (pide PIN) | Reglas de la partida, sala de inscripción con QR, asientos (corrige o asigna a quien no tiene celular), ruleta, solicitudes de cambio, respuestas calificadas automáticamente (se pueden corregir), marcador, deshacer ronda. |
 
 El asiento elegido **no se envía a los celulares** hasta que la ruleta se detiene, y ningún estudiante recibe las respuestas de los demás.
 
@@ -52,7 +52,7 @@ nginx sirve la página compilada (`dist/`) y reenvía el WebSocket `/ws` al serv
 | Archivo | Para qué |
 |---|---|
 | `deploy/nginx-esquiva.conf` | Sitio en un dominio o subdominio propio (`https://esquiva.tu-dominio.com/`). |
-| `deploy/nginx-esquiva-subruta.conf` | Bloques para pegar en un sitio existente y publicarlo en `https://tu-dominio.com/esquiva/`. |
+| `deploy/nginx-esquiva-subruta.conf` | Bloques para pegar en un sitio existente y publicarlo en `https://tu-dominio.com/esquiva/`. En ese caso se compila con `BASE_PATH=/esquiva/ npm run build`. |
 | `deploy/esquiva.service` | Servicio systemd que mantiene el servidor Node encendido. |
 
 ### Pasos (Debian/Ubuntu)
@@ -89,7 +89,7 @@ Claves de la configuración de nginx:
 
 - `proxy_set_header Upgrade` / `Connection`: sin ellas el WebSocket no conecta y los celulares quedan en "conectando…".
 - `proxy_read_timeout 1h`: evita que nginx corte la conexión durante una ronda larga (por defecto son 60 s; el servidor además envía un ping cada 20 s).
-- `try_files $uri /index.html`: cualquier ruta carga la página. El profesor entra por `/#profesor`.
+- `try_files $uri /index.html`: cualquier ruta (como `/profesor`) carga la página.
 
 ## Desarrollo
 
@@ -98,7 +98,7 @@ npm run dev      # servidor del juego (:3000) + Vite (:5173) a la vez; abre http
 npm start        # solo el servidor; sirve dist/ (necesita npm run build)
 ```
 
-En desarrollo se entra por `http://localhost:5173/` (estudiante) y `http://localhost:5173/#profesor`. El servidor se reinicia solo al cambiar `server/` o `src/game/`; la página se recarga sola al cambiar `src/`.
+En desarrollo se entra por `http://localhost:5173/` (estudiante) y `http://localhost:5173/profesor`. El servidor se reinicia solo al cambiar `server/` o `src/game/`; la página se recarga sola al cambiar `src/`.
 
 ## Estructura
 
