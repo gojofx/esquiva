@@ -1,0 +1,26 @@
+# Servicio del juego en esquiva.undubb.online.
+# Instalar: cp deploy/esquiva.undubb.online.service /etc/systemd/system/esquiva.service
+#           systemctl daemon-reload && systemctl enable --now esquiva
+[Unit]
+Description=Ruleta de Asientos (esquiva.undubb.online)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=esquiva
+Group=esquiva
+WorkingDirectory=/var/www/html/esquiva
+# PORT, HOST, PROFESOR_PIN y DB_* vienen de /var/www/html/esquiva/.env (lo lee el propio servidor)
+Environment=NODE_ENV=production
+# Copia del binario de Node: el de nvm vive en /root y el usuario esquiva no puede leerlo
+ExecStart=/opt/esquiva/runtime/node server/index.js
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/html/esquiva/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
