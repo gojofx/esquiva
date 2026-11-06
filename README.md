@@ -94,9 +94,11 @@ Claves de la configuración de nginx:
 ## Desarrollo
 
 ```bash
-npm start        # servidor en :3000 (necesita npm run build al menos una vez)
-npm run dev      # Vite con recarga en caliente; reenvía /ws al servidor de :3000
+npm run dev      # servidor del juego (:3000) + Vite (:5173) a la vez; abre http://localhost:5173/
+npm start        # solo el servidor; sirve dist/ (necesita npm run build)
 ```
+
+En desarrollo se entra por `http://localhost:5173/` (estudiante) y `http://localhost:5173/#profesor`. El servidor se reinicia solo al cambiar `server/` o `src/game/`; la página se recarga sola al cambiar `src/`.
 
 ## Estructura
 
