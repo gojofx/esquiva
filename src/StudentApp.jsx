@@ -272,7 +272,10 @@ function RoundView({ v, send }) {
     <>
       <div className="chalk-box">
         <div className="status">
-          <span className={"pill " + (clue.kind === "exact" ? "y" : "b")}>{label}</span>
+          <span className="btn-row" style={{ gap: 6 }}>
+            <span className={"pill " + (clue.kind === "exact" ? "y" : "b")}>{label}</span>
+            {clue.level && <span className="pill o">NIVEL {clue.level}</span>}
+          </span>
           {phase === "timing" && <span className={"clock" + (left <= 5 ? " done" : "")} style={{ fontSize: 30 }}>{fmt(left)}</span>}
         </div>
         <div className="write"><ClueText text={clue.text} /></div>

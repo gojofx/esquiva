@@ -46,7 +46,7 @@ export default function Scoreboard({ state }) {
           <div className="log-entry" key={e.roundNo}>
             <div className="status">
               <b>Ronda {e.roundNo} · cayó el asiento {e.clue.target}</b>
-              <span className="muted" style={{ fontSize: 14 }}>{e.clue.kind === "exact" ? "pista exacta" : "pista que reduce"}</span>
+              <span className="muted" style={{ fontSize: 14 }}>{e.clue.kind === "exact" ? "pista exacta" : "pista que reduce"}{e.clue.level ? ` · nivel ${e.clue.level}` : ""}</span>
             </div>
             <div className="write"><ClueText text={e.clue.text} /></div>
             <div style={{ fontSize: 14 }}>

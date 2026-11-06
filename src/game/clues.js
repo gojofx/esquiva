@@ -2,6 +2,10 @@
 
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+// "3x", "x"; y "+ 5" / "− 5" para constantes con signo.
+const term = (k, v) => (k === 1 ? v : `${k}${v}`);
+const signed = (n) => (n < 0 ? `− ${-n}` : `+ ${n}`);
 
 // Cada generador devuelve { txt, sol, eq } para un valor t, o null si no aplica.
 const GENS = {
@@ -60,6 +64,71 @@ const GENS = {
     const k = rnd(2, 5), c = rnd(1, 15), m = k * t + c;
     return { eq: true, txt: `${k}${v} + ${c} = ${m}`, sol: `${k}${v} = ${m} − ${c} = ${k * t} → ${v} = ${k * t} ÷ ${k} = ${t}` };
   },
+
+  /* ---- Nivel 5: ecuaciones avanzadas ---- */
+  // Incógnita en ambos lados: a·x + b = c·x + d
+  eqBoth: (t, v) => {
+    const a = rnd(3, 9), c = rnd(1, a - 1), b = rnd(1, 20), d = (a - c) * t + b;
+    return {
+      eq: true,
+      txt: `${term(a, v)} + ${b} = ${term(c, v)} + ${d}`,
+      sol: `${term(a, v)} − ${term(c, v)} = ${d} − ${b} → ${term(a - c, v)} = ${d - b} → ${v} = ${t}`,
+    };
+  },
+  // Paréntesis: a(x + b) − c = m
+  eqParen: (t, v) => {
+    const a = rnd(2, 7), b = rnd(1, 12), c = rnd(1, 15), m = a * (t + b) - c;
+    if (m <= 0) return null;
+    return {
+      eq: true,
+      txt: `${a}(${v} + ${b}) − ${c} = ${m}`,
+      sol: `${a}(${v} + ${b}) = ${m} + ${c} = ${m + c} → ${v} + ${b} = ${(m + c) / a} → ${v} = ${t}`,
+    };
+  },
+  // Fracción con dos pasos: (x + b) ÷ a + k = m
+  eqFrac: (t, v) => {
+    const a = rnd(2, 6), b = a - (t % a) + a * rnd(0, 2), k = rnd(1, 12), q = (t + b) / a;
+    return {
+      eq: true,
+      txt: `(${v} + ${b}) ÷ ${a} + ${k} = ${q + k}`,
+      sol: `(${v} + ${b}) ÷ ${a} = ${q + k} − ${k} = ${q} → ${v} + ${b} = ${q} × ${a} = ${q * a} → ${v} = ${t}`,
+    };
+  },
+  // Cuadrado: a·x² ± b = m (x positivo)
+  eqSquare: (t, v) => {
+    if (t > 12) return null;
+    const a = rnd(1, 3), sq = t * t, b = rnd(1, 30), plus = Math.random() < 0.5 || a * sq - b <= 0;
+    const m = plus ? a * sq + b : a * sq - b;
+    const k = a === 1 ? "" : a;
+    const step = a === 1 ? "" : ` → ${v}² = ${a * sq} ÷ ${a} = ${sq}`;
+    return {
+      eq: true,
+      txt: `${k}${v}² ${plus ? "+" : "−"} ${b} = ${m}`,
+      sol: `${k}${v}² = ${m} ${plus ? "−" : "+"} ${b} = ${a * sq}${step} → ${v} = ${t} (positivo)`,
+    };
+  },
+  // Suma de fracciones: x/a + x/b = c
+  eqFracs: (t, v) => {
+    const pairs = [];
+    for (let a = 2; a <= 6; a++) for (let b = a + 1; b <= 8; b++) if (t % a === 0 && t % b === 0) pairs.push([a, b]);
+    if (!pairs.length) return null;
+    const [a, b] = pick(pairs), L = (a * b) / gcd(a, b), c = t / a + t / b;
+    return {
+      eq: true,
+      txt: `${v}/${a} + ${v}/${b} = ${c}`,
+      sol: `se multiplica por ${L}: ${term(L / a, v)} + ${term(L / b, v)} = ${c * L} → ${term(L / a + L / b, v)} = ${c * L} → ${v} = ${t}`,
+    };
+  },
+  // Distributiva con incógnita en ambos lados: a(x − b) = c·x ± d
+  eqDist: (t, v) => {
+    const a = rnd(3, 8), c = rnd(1, a - 1), b = rnd(1, Math.max(1, Math.min(9, t - 1))), d = a * (t - b) - c * t;
+    if (d === 0) return null;
+    return {
+      eq: true,
+      txt: `${a}(${v} − ${b}) = ${term(c, v)} ${signed(d)}`,
+      sol: `${term(a, v)} − ${a * b} = ${term(c, v)} ${signed(d)} → ${term(a - c, v)} = ${a * b} ${signed(d)} = ${a * b + d} → ${v} = ${t}`,
+    };
+  },
 };
 
 export const LEVELS = {
@@ -67,6 +136,7 @@ export const LEVELS = {
   2: { name: "Nivel 2 · multiplicar y dividir", gens: ["mul", "div", "mul", "div", "add"] },
   3: { name: "Nivel 3 · operaciones combinadas", gens: ["mulAdd", "mulSub", "parenDiv", "square"] },
   4: { name: "Nivel 4 · ecuaciones", gens: ["eqAdd", "eqMul", "eqLin"] },
+  5: { name: "Nivel 5 · ecuaciones avanzadas", gens: ["eqBoth", "eqParen", "eqFrac", "eqSquare", "eqFracs", "eqDist"] },
 };
 
 // Una expresión cuyo resultado es t, según el nivel.
@@ -86,6 +156,7 @@ export function exactClue(target, level) {
   const e = exprFor(target, level, "x");
   return {
     kind: "exact",
+    level,
     target,
     text: `El asiento que cae es ${show(e, "x")}`,
     solve: `${e.sol} · se anota: ${target}`,
@@ -130,6 +201,7 @@ export function reduceClue(target, activeNums, level) {
     if (cands.length >= 2 && cands.length <= 5 && cands.includes(target)) {
       return {
         kind: "reduce",
+        level,
         target,
         text: "El asiento " + chosen.map((f) => f.txt).join(" y "),
         solve: chosen.map((f) => f.sol).join(" · ") + " · entre los asientos en juego → " + cands.join(", "),

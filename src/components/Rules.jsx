@@ -110,7 +110,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="pistas">
-          <div className="sec-head"><span className="sec-ico gold"><Icon name="bulb" size={26} /></span><h2>Las pistas</h2><span className="hand">dos tipos, distinto riesgo</span></div>
+          <div className="sec-head"><span className="sec-ico gold"><Icon name="bulb" size={26} /></span><h2>Las pistas</h2><span className="hand">dos tipos, distinto riesgo · 5 niveles de dificultad</span></div>
           <div className="clue-row">
             <div className="chalk-box">
               <span className="pill y">PISTA EXACTA · {s(pts.exact)}</span>
@@ -135,8 +135,9 @@ export default function Rules({ pts, onPlay }) {
             <div className="level"><b>Nivel 2</b><br /><span className="mono">4 × 6</span> · <span className="mono">36 ÷ 3</span></div>
             <div className="level"><b>Nivel 3</b><br /><span className="mono">(9 + 3) ÷ 2</span> · <span className="mono">5² − 7</span></div>
             <div className="level"><b>Nivel 4</b><br /><span className="mono">x + 8 = 21</span> · <span className="mono">3x = 27</span></div>
+            <div className="level"><b>Nivel 5</b><br /><span className="mono">5x + 3 = 2x + 27</span> · <span className="mono">x/2 + x/3 = 10</span> · <span className="mono">3(x + 4) − 5 = 40</span></div>
           </div>
-          <p className="muted" style={{ marginTop: 14 }}>La pista solo puede dar como resultado asientos que sigan en juego. Si el asiento 7 es de alguien que está fuera, ninguna pista puede dar 7.</p>
+          <p className="muted" style={{ marginTop: 14 }}>El profesor puede cambiar la dificultad en medio de la partida, entre una ronda y otra. La pista solo puede dar como resultado asientos que sigan en juego. Si el asiento 7 es de alguien que está fuera, ninguna pista puede dar 7.</p>
         </section>
 
         <section id="intercambios">

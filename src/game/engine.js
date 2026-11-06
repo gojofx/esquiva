@@ -1,4 +1,4 @@
-import { makeClue, exactClue, weightedPick, rnd } from "./clues.js";
+import { makeClue, exactClue, weightedPick, rnd, LEVELS } from "./clues.js";
 
 export const DEFAULT_POINTS = {
   start: 10,
@@ -233,6 +233,17 @@ export function reducer(s, action) {
       const target = weightedPick(seats, (n) => s.weights[n] || 1);
       const clue = makeClue(target, seats, s.config.clueType, s.config.level);
       return { ...s, phase: "ready", round: { clue, swaps: {}, answers: {}, first: [], subs: {}, moves: [], endsAt: null } };
+    }
+    case "SET_LEVEL": {
+      // La dificultad se puede cambiar en medio de la partida: entre rondas, o con la pista
+      // ya en pantalla mientras no haya empezado el tiempo (se regenera para el mismo asiento).
+      const level = Number(action.level);
+      if (!LEVELS[level] || level === s.config.level) return s;
+      if (!["lobby", "idle", "ready"].includes(s.phase)) return s;
+      const next = { ...s, config: { ...s.config, level } };
+      if (s.phase !== "ready") return next;
+      const clue = makeClue(s.round.clue.target, activeSeats(s), s.config.clueType, level);
+      return { ...next, round: { ...s.round, clue } };
     }
     case "REROLL_CLUE": {
       if (s.phase !== "ready") return s;

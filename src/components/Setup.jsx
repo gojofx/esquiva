@@ -36,7 +36,7 @@ export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripci
       rounds: clamp(c.rounds, 1, 50, 8),
       seconds: clamp(c.seconds, 5, 600, 45),
       swapLimit: clamp(c.swapLimit, 0, 10, 1),
-      level: clamp(c.level, 1, 4, 2),
+      level: clamp(c.level, 1, 5, 2),
       pts,
     });
   };

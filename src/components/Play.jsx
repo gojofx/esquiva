@@ -4,6 +4,22 @@ import Wheel from "./Wheel.jsx";
 import ClueText from "./ClueText.jsx";
 import Finished from "./Finished.jsx";
 import Claims from "./Claims.jsx";
+import { LEVELS } from "../game/clues.js";
+
+function LevelPicker({ state, dispatch }) {
+  const { phase, config } = state;
+  const editable = phase === "idle" || phase === "ready";
+  return (
+    <label className="level-pick" title={editable ? "" : "Se puede cambiar entre rondas o antes de iniciar el tiempo"}>
+      <span>Dificultad</span>
+      <select value={config.level} disabled={!editable} onChange={(e) => dispatch({ type: "SET_LEVEL", level: Number(e.target.value) })}>
+        {Object.entries(LEVELS).map(([k, v]) => (
+          <option key={k} value={k}>{v.name}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
@@ -40,11 +56,14 @@ function CluePanel({ state }) {
   const revealed = phase === "scoring";
   return (
     <div className="chalk-box clue-big">
-      {clue.kind === "exact" ? (
-        <span className="pill y">PISTA EXACTA · +{pts.exact}</span>
-      ) : (
-        <span className="pill b">PISTA QUE REDUCE · LISTA +{pts.list} · APUESTA +{pts.bet}</span>
-      )}
+      <div className="btn-row" style={{ gap: 6 }}>
+        {clue.kind === "exact" ? (
+          <span className="pill y">PISTA EXACTA · +{pts.exact}</span>
+        ) : (
+          <span className="pill b">PISTA QUE REDUCE · LISTA +{pts.list} · APUESTA +{pts.bet}</span>
+        )}
+        {clue.level && <span className="pill o">NIVEL {clue.level}</span>}
+      </div>
       <div className="write">
         <ClueText text={clue.text} />
       </div>
@@ -355,6 +374,7 @@ export default function Play({ data, dispatch, resolveClaim }) {
           </span>
         </div>
         <div className="btn-row">
+          <LevelPicker state={state} dispatch={dispatch} />
           {phase === "idle" && state.prev && (
             <button className="btn ghost small" type="button" onClick={() => dispatch({ type: "UNDO" })}>
               Deshacer ronda {roundNo}

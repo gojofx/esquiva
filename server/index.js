@@ -109,7 +109,7 @@ function studentView(playerId) {
   if (s.round) {
     const revealed = s.phase === "scoring";
     const c = s.round.clue;
-    base.clue = revealed ? c : { kind: c.kind, text: c.text };
+    base.clue = revealed ? c : { kind: c.kind, text: c.text, level: c.level };
     base.endsAt = s.round.endsAt;
     base.swapsLeft = Math.max(0, s.config.swapLimit - (s.round.swaps[me.id] || 0));
     if (s.phase === "ready" || s.phase === "timing") {
@@ -190,7 +190,7 @@ if (state.phase === "timing") apply({ type: "CLOSE" });
 
 const TEACHER_ACTIONS = new Set([
   "OPEN_LOBBY", "SET_CONFIG", "ADD_MANUAL", "SET_SEAT", "REMOVE_PLAYER", "START_GAME", "RESET", "CYCLE_WEIGHT",
-  "NEW_ROUND", "REROLL_CLUE", "START_TIMER", "CLOSE", "SWAP", "SPIN", "SPIN_DONE", "SET_ANSWER", "TOGGLE_FIRST",
+  "NEW_ROUND", "REROLL_CLUE", "SET_LEVEL", "START_TIMER", "CLOSE", "SWAP", "SPIN", "SPIN_DONE", "SET_ANSWER", "TOGGLE_FIRST",
   "APPLY", "UNDO", "FINISH_NOW", "TIEBREAK", "TIEBREAK_SOLVE", "SET_WINNER",
 ]);
 
