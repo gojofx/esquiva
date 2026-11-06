@@ -14,6 +14,7 @@ export const DEFAULT_POINTS = {
 };
 
 export const DEFAULT_CONFIG = {
+  classSeats: 40,
   rounds: 8,
   seconds: 45,
   swapLimit: 1,
@@ -143,6 +144,27 @@ export function grade(clue, sub) {
 export const canSubmit = (s, now = Date.now()) =>
   (s.phase === "ready" || s.phase === "timing") && !!s.round && (!s.round.endsAt || now <= s.round.endsAt + 500);
 
+const swapOpen = (s) => (s.phase === "ready" || s.phase === "timing") && !!s.round;
+export const canMove = (s, p) => !!p && !p.out && (s.round.swaps[p.id] || 0) < s.config.swapLimit;
+
+// Rota a los ocupantes: el de seats[0] pasa a seats[1], ..., el último pasa a seats[0].
+function doSwap(s, seats) {
+  if (!swapOpen(s) || !Array.isArray(seats) || seats.length < 2 || new Set(seats).size !== seats.length) return s;
+  const occ = seats.map((n) => s.players.find((p) => p.seat === n));
+  if (occ.some((p) => !canMove(s, p))) return s;
+  const moveTo = {};
+  occ.forEach((p, i) => (moveTo[p.id] = seats[(i + 1) % seats.length]));
+  const swaps = { ...s.round.swaps };
+  occ.forEach((p) => (swaps[p.id] = (swaps[p.id] || 0) + 1));
+  // Las solicitudes de quienes ya se movieron dejan de valer.
+  const moves = (s.round.moves || []).filter((m) => !moveTo[m.from] && !moveTo[m.to]);
+  return {
+    ...s,
+    players: s.players.map((p) => (moveTo[p.id] ? { ...p, seat: moveTo[p.id] } : p)),
+    round: { ...s.round, swaps, moves },
+  };
+}
+
 function strip(s) {
   const { prev, ...rest } = s;
   return rest;
@@ -163,37 +185,39 @@ export function reducer(s, action) {
   switch (action.type) {
     case "OPEN_LOBBY":
       if (s.phase !== "setup") return s;
-      return { ...initialState, config: action.config, phase: "lobby" };
-    case "SET_CONFIG":
+      return { ...initialState, config: action.config, phase: "lobby", gameId: action.gameId || null };
+    case "SET_CONFIG": {
       if (s.phase !== "lobby") return s;
-      return { ...s, config: action.config, players: s.players.map((p) => ({ ...p, score: action.config.pts.start })) };
+      const c = action.config;
+      const players = s.players.map((p) => ({ ...p, score: c.pts.start, seat: p.seat && p.seat <= c.classSeats ? p.seat : null }));
+      return { ...s, config: c, players };
+    }
     case "REGISTER":
     case "ADD_MANUAL": {
       if (s.phase !== "lobby" || s.players.length >= 60) return s;
       const name = cleanName(action.name);
       if (!name || s.players.some((p) => sameName(p.name, name))) return s;
-      const p = { id: s.nextId, name, seat: s.players.length + 1, score: s.config.pts.start, out: false, outHits: 0 };
+      const p = { id: s.nextId, name, seat: null, score: s.config.pts.start, out: false, outHits: 0 };
       return { ...s, nextId: s.nextId + 1, players: [...s.players, p] };
     }
-    case "REMOVE_PLAYER": {
+    case "SET_SEAT": {
+      // En la inscripción: el estudiante (o el profesor) elige el asiento donde está sentado.
       if (s.phase !== "lobby") return s;
-      const players = s.players.filter((p) => p.id !== action.id).map((p, i) => ({ ...p, seat: i + 1 }));
-      return { ...s, players };
+      const seat = action.seat == null ? null : Number(action.seat);
+      if (seat !== null && (!Number.isInteger(seat) || seat < 1 || seat > s.config.classSeats)) return s;
+      if (seat !== null && s.players.some((p) => p.seat === seat && p.id !== action.id)) return s;
+      if (!s.players.some((p) => p.id === action.id)) return s;
+      return { ...s, players: s.players.map((p) => (p.id === action.id ? { ...p, seat } : p)) };
     }
-    case "MOVE_PLAYER": {
+    case "REMOVE_PLAYER":
       if (s.phase !== "lobby") return s;
-      const i = s.players.findIndex((p) => p.id === action.id), j = i + action.dir;
-      if (i < 0 || j < 0 || j >= s.players.length) return s;
-      const players = [...s.players];
-      [players[i], players[j]] = [players[j], players[i]];
-      return { ...s, players: players.map((p, k) => ({ ...p, seat: k + 1 })) };
-    }
+      return { ...s, players: s.players.filter((p) => p.id !== action.id) };
     case "START_GAME": {
-      if (s.phase !== "lobby" || s.players.length < 4) return s;
-      const players = s.players.map((p, i) => ({ ...p, seat: i + 1, score: s.config.pts.start, out: false, outHits: 0 }));
+      if (s.phase !== "lobby" || s.players.length < 4 || s.players.some((p) => !p.seat)) return s;
+      const players = s.players.map((p) => ({ ...p, score: s.config.pts.start, out: false, outHits: 0 }));
       const weights = {};
       players.forEach((p) => (weights[p.seat] = 1));
-      return { ...s, players, weights, seatCount: players.length, phase: "idle" };
+      return { ...s, players, weights, seatCount: Math.max(...players.map((p) => p.seat)), phase: "idle" };
     }
     case "RESET":
       return { ...initialState, config: s.config };
@@ -208,7 +232,7 @@ export function reducer(s, action) {
       if (seats.length < 2) return s;
       const target = weightedPick(seats, (n) => s.weights[n] || 1);
       const clue = makeClue(target, seats, s.config.clueType, s.config.level);
-      return { ...s, phase: "ready", round: { clue, swaps: {}, answers: {}, first: [], subs: {}, endsAt: null } };
+      return { ...s, phase: "ready", round: { clue, swaps: {}, answers: {}, first: [], subs: {}, moves: [], endsAt: null } };
     }
     case "REROLL_CLUE": {
       if (s.phase !== "ready") return s;
@@ -221,26 +245,34 @@ export function reducer(s, action) {
       return { ...s, phase: "timing", round: { ...s.round, endsAt: Date.now() + s.config.seconds * 1000 } };
     case "CLOSE":
       if (s.phase !== "timing" && s.phase !== "ready") return s;
-      return { ...s, phase: "closed" };
-    case "SWAP": {
-      // Rota a los ocupantes: el de seats[0] pasa a seats[1], ..., el último pasa a seats[0].
-      if (s.phase !== "ready" && s.phase !== "timing") return s;
-      const seats = action.seats;
-      const occ = seats.map((n) => s.players.find((p) => p.seat === n));
-      if (occ.some((p) => !p || p.out || (s.round.swaps[p.id] || 0) >= s.config.swapLimit)) return s;
-      const moveTo = {};
-      occ.forEach((p, i) => (moveTo[p.id] = seats[(i + 1) % seats.length]));
-      const swaps = { ...s.round.swaps };
-      occ.forEach((p) => (swaps[p.id] = (swaps[p.id] || 0) + 1));
-      return {
-        ...s,
-        players: s.players.map((p) => (moveTo[p.id] ? { ...p, seat: moveTo[p.id] } : p)),
-        round: { ...s.round, swaps },
-      };
+      return { ...s, phase: "closed", round: { ...s.round, moves: [] } };
+    case "SWAP":
+      return doSwap(s, action.seats);
+    case "MOVE_REQUEST": {
+      // Un estudiante pide pasarse al asiento de un compañero; el compañero debe aceptar.
+      if (!swapOpen(s)) return s;
+      const from = s.players.find((p) => p.id === action.from);
+      const to = s.players.find((p) => p.seat === Number(action.toSeat));
+      if (!from || !to || from.id === to.id || !canMove(s, from) || !canMove(s, to)) return s;
+      const moves = s.round.moves.filter((m) => m.from !== from.id);
+      moves.push({ id: action.reqId, from: from.id, to: to.id, at: action.at });
+      return { ...s, round: { ...s.round, moves } };
+    }
+    case "MOVE_CANCEL":
+      if (!swapOpen(s)) return s;
+      return { ...s, round: { ...s.round, moves: s.round.moves.filter((m) => m.from !== action.from) } };
+    case "MOVE_ANSWER": {
+      if (!swapOpen(s)) return s;
+      const m = s.round.moves.find((x) => x.id === action.reqId && x.to === action.to);
+      if (!m) return s;
+      const rest = { ...s, round: { ...s.round, moves: s.round.moves.filter((x) => x !== m) } };
+      if (!action.accept) return rest;
+      const a = s.players.find((p) => p.id === m.from), b = s.players.find((p) => p.id === m.to);
+      return doSwap(rest, [a.seat, b.seat]);
     }
     case "SPIN":
       if (!["ready", "timing", "closed"].includes(s.phase)) return s;
-      return { ...s, phase: "spinning" };
+      return { ...s, phase: "spinning", round: { ...s.round, moves: [] } };
     case "SUBMIT": {
       // Lo genera el servidor a partir del mensaje de un celular.
       if (!canSubmit(s, action.at)) return s;

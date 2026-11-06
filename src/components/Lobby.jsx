@@ -19,6 +19,11 @@ export default function Lobby({ data, dispatch, resolveClaim }) {
   const [editing, setEditing] = useState(false);
   const url = studentUrl();
   const players = state.players;
+  const unseated = players.filter((p) => !p.seat).length;
+  const sorted = [...players].sort((a, b) => (a.seat || 0) - (b.seat || 0) || a.id - b.id);
+  const taken = new Set(players.map((p) => p.seat).filter(Boolean));
+  const seatsFor = (p) =>
+    Array.from({ length: state.config.classSeats }, (_, i) => i + 1).filter((n) => n === p.seat || !taken.has(n));
 
   if (editing)
     return (
@@ -67,27 +72,36 @@ export default function Lobby({ data, dispatch, resolveClaim }) {
           <div className="hand" style={{ fontSize: 28, color: "var(--yellow)" }}>Entren desde el celular</div>
           <QR url={url} />
           <div className="mono url-big">{url}</div>
-          <p className="muted">Cada uno escribe su nombre. El nombre queda guardado en su celular hasta el final del juego.</p>
+          <p className="muted">Cada uno escribe su nombre y elige su asiento. El nombre queda guardado en su celular hasta el final del juego.</p>
         </div>
 
         <div className="panel">
-          <h3>Estudiantes y número de asiento</h3>
+          <h3>Estudiantes y asiento</h3>
           <p className="muted" style={{ fontSize: 14 }}>
-            El número es el asiento de cada uno en la ruleta. Ordénalos según dónde están sentados. Los que no tienen celular se agregan a mano
-            y el profesor marca sus respuestas.
+            Cada estudiante elige en su celular el asiento donde está sentado. Puedes corregirlo aquí. A quien no tiene celular lo agregas a
+            mano, le asignas el asiento y marcas sus respuestas.
           </p>
           {players.length === 0 && <p className="muted">Todavía no se ha inscrito nadie.</p>}
           <ol className="lobby-list">
-            {players.map((p, i) => (
+            {sorted.map((p) => (
               <li key={p.id}>
-                <span className="mono seatno">{p.seat}</span>
+                <select
+                  className="seat-select"
+                  aria-label={`Asiento de ${p.name}`}
+                  value={p.seat || ""}
+                  onChange={(e) => dispatch({ type: "SET_SEAT", id: p.id, seat: e.target.value ? Number(e.target.value) : null })}
+                >
+                  <option value="">—</option>
+                  {seatsFor(p).map((n) => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
                 <span className={"dot-on" + (online.includes(p.id) ? " on" : "")} title={online.includes(p.id) ? "conectado" : "desconectado"} />
                 <span className="nm">
                   {p.name}
                   {!linked.includes(p.id) && <span className="tag-mini zero">sin celular</span>}
+                  {!p.seat && <span className="tag-mini minus">sin asiento</span>}
                 </span>
-                <button type="button" className="icon" aria-label={`Subir a ${p.name}`} disabled={i === 0} onClick={() => dispatch({ type: "MOVE_PLAYER", id: p.id, dir: -1 })}>↑</button>
-                <button type="button" className="icon" aria-label={`Bajar a ${p.name}`} disabled={i === players.length - 1} onClick={() => dispatch({ type: "MOVE_PLAYER", id: p.id, dir: 1 })}>↓</button>
                 <button
                   type="button"
                   className="icon danger"
@@ -104,7 +118,8 @@ export default function Lobby({ data, dispatch, resolveClaim }) {
             <button className="btn ghost small" type="submit" disabled={!name.trim()}>Agregar</button>
           </form>
           {players.length < 4 && <div className="warnbar">Se necesitan al menos 4 estudiantes para empezar.</div>}
-          <button className="btn" type="button" disabled={players.length < 4} onClick={() => dispatch({ type: "START_GAME" })}>
+          {unseated > 0 && <div className="warnbar">{unseated} sin asiento: todos deben tener asiento para empezar.</div>}
+          <button className="btn" type="button" disabled={players.length < 4 || unseated > 0} onClick={() => dispatch({ type: "START_GAME" })}>
             Cerrar inscripciones y empezar ({players.length})
           </button>
         </div>

@@ -6,12 +6,15 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
-import { reducer, initialState, DEFAULT_CONFIG, DEFAULT_POINTS, cleanName, sameName, canSubmit, scoreRound } from "../src/game/engine.js";
+import { createStorage } from "./storage.js";
+import { reducer, initialState, DEFAULT_CONFIG, DEFAULT_POINTS, cleanName, sameName, canSubmit, scoreRound, canMove } from "../src/game/engine.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// Variables de entorno desde .env (si existe), sin dependencias.
+const ENV_FILE = path.join(ROOT, ".env");
+if (fs.existsSync(ENV_FILE) && typeof process.loadEnvFile === "function") process.loadEnvFile(ENV_FILE);
 const DIST = path.join(ROOT, "dist");
 const DATA_DIR = process.env.DATA_DIR || path.join(ROOT, "data");
-const DATA_FILE = path.join(DATA_DIR, "partida.json");
 const PORT = Number(process.env.PORT) || 3000;
 const HOST = process.env.HOST || "0.0.0.0";
 
@@ -33,27 +36,30 @@ const pinOk = (p) => {
 };
 
 /* ---------- Estado persistente ---------- */
+const storage = await createStorage(DATA_DIR);
 let state = initialState;
 let tokens = new Map(); // token -> playerId
-try {
-  const saved = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+const saved = await storage.load();
+if (saved && saved.state) {
   const config = { ...DEFAULT_CONFIG, ...saved.state.config, pts: { ...DEFAULT_POINTS, ...saved.state.config?.pts } };
   state = { ...initialState, ...saved.state, config };
   tokens = new Map(saved.tokens || []);
-  console.log(`Partida recuperada de ${DATA_FILE} (fase: ${state.phase}).`);
-} catch {
-  /* sin partida guardada */
+  console.log(`Partida recuperada (fase: ${state.phase}).`);
 }
 
 let saveTimer = null;
 function save() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const tmp = DATA_FILE + ".tmp";
-    fs.writeFileSync(tmp, JSON.stringify({ state, tokens: [...tokens] }));
-    fs.renameSync(tmp, DATA_FILE);
-  }, 200);
+  saveTimer = setTimeout(() => storage.save({ state, tokens: [...tokens] }), 150);
 }
+async function flushAndExit() {
+  clearTimeout(saveTimer);
+  await storage.save({ state, tokens: [...tokens] });
+  await storage.flush();
+  process.exit(0);
+}
+process.on("SIGINT", flushAndExit);
+process.on("SIGTERM", flushAndExit);
 
 /* ---------- Vistas ---------- */
 const sockets = new Set(); // ws con ws.role = "teacher" | "student", ws.playerId
@@ -92,7 +98,10 @@ function studentView(playerId) {
     count: s.players.length,
   };
   if (!me) return base;
-  if (s.phase === "lobby") base.lobby = s.players.map((p) => p.name);
+  if (s.phase === "lobby") {
+    base.classSeats = s.config.classSeats;
+    base.taken = s.players.filter((p) => p.seat && p.id !== me.id).map((p) => ({ seat: p.seat, name: p.name }));
+  }
 
   const ranked = [...s.players].sort((a, b) => b.score - a.score || a.id - b.id);
   base.position = ranked.findIndex((p) => p.id === me.id) + 1;
@@ -103,6 +112,18 @@ function studentView(playerId) {
     base.clue = revealed ? c : { kind: c.kind, text: c.text };
     base.endsAt = s.round.endsAt;
     base.swapsLeft = Math.max(0, s.config.swapLimit - (s.round.swaps[me.id] || 0));
+    if (s.phase === "ready" || s.phase === "timing") {
+      const byId = (id) => s.players.find((p) => p.id === id);
+      base.seatMap = s.players
+        .filter((p) => p.id !== me.id)
+        .map((p) => ({ seat: p.seat, name: p.name, out: p.out, free: canMove(s, p) }))
+        .sort((a, b) => a.seat - b.seat);
+      const mine = s.round.moves.find((m) => m.from === me.id);
+      if (mine) base.outgoing = { seat: byId(mine.to).seat, name: byId(mine.to).name };
+      base.incoming = s.round.moves
+        .filter((m) => m.to === me.id)
+        .map((m) => ({ id: m.id, seat: byId(m.from).seat, name: byId(m.from).name }));
+    }
     const sub = s.round.subs?.[me.id];
     if (sub) {
       const declared = Object.entries(s.round.subs)
@@ -144,8 +165,11 @@ function broadcast() {
 let closeTimer = null;
 function apply(action) {
   const before = state;
+  if (action.type === "OPEN_LOBBY") action = { ...action, gameId: crypto.randomUUID() };
   state = reducer(state, action);
   if (state === before) return false;
+  // Cada vez que una partida llega al final (o cambia el ganador) se guarda en el historial.
+  if (state.phase === "finished" && (before.phase !== "finished" || before.winnerId !== state.winnerId)) storage.archive(state);
 
   // Si se borró la partida o un jugador, se invalidan sus enlaces.
   const ids = new Set(state.players.map((p) => p.id));
@@ -165,7 +189,7 @@ function apply(action) {
 if (state.phase === "timing") apply({ type: "CLOSE" });
 
 const TEACHER_ACTIONS = new Set([
-  "OPEN_LOBBY", "SET_CONFIG", "ADD_MANUAL", "REMOVE_PLAYER", "MOVE_PLAYER", "START_GAME", "RESET", "CYCLE_WEIGHT",
+  "OPEN_LOBBY", "SET_CONFIG", "ADD_MANUAL", "SET_SEAT", "REMOVE_PLAYER", "START_GAME", "RESET", "CYCLE_WEIGHT",
   "NEW_ROUND", "REROLL_CLUE", "START_TIMER", "CLOSE", "SWAP", "SPIN", "SPIN_DONE", "SET_ANSWER", "TOGGLE_FIRST",
   "APPLY", "UNDO", "FINISH_NOW", "TIEBREAK", "TIEBREAK_SOLVE", "SET_WINNER",
 ]);
@@ -266,6 +290,21 @@ function onMessage(ws, raw) {
   if (ws.role === "student") {
     if (msg.t === "register" && !ws.playerId) onStudentRegister(ws, msg.name);
     if (msg.t === "submit") onSubmit(ws, msg);
+    if (!ws.playerId) return;
+    if (msg.t === "seat") {
+      if (state.phase !== "lobby") return;
+      if (!apply({ type: "SET_SEAT", id: ws.playerId, seat: msg.seat }))
+        send(ws, { t: "error", msg: "Ese asiento ya lo eligió otra persona." });
+    }
+    if (msg.t === "move-request") {
+      const ok = apply({ type: "MOVE_REQUEST", from: ws.playerId, toSeat: msg.seat, reqId: crypto.randomUUID(), at: Date.now() });
+      if (!ok) send(ws, { t: "error", msg: "No se puede pedir ese cambio (tiempo cerrado o sin intercambios disponibles)." });
+    }
+    if (msg.t === "move-cancel") apply({ type: "MOVE_CANCEL", from: ws.playerId });
+    if (msg.t === "move-answer") {
+      const ok = apply({ type: "MOVE_ANSWER", to: ws.playerId, reqId: String(msg.id || ""), accept: !!msg.accept });
+      if (!ok) send(ws, { t: "error", msg: "Esa solicitud ya no está disponible." });
+    }
   }
 }
 
@@ -327,5 +366,6 @@ setInterval(() => {
 server.listen(PORT, HOST, () => {
   console.log(`Ruleta de Asientos en http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${PORT}`);
   console.log(`  Estudiantes: /            Profesor: /#profesor`);
+  console.log(`  Datos: ${storage.describe}`);
   console.log(`  PIN del profesor: ${PIN}${process.env.PROFESOR_PIN ? " (de PROFESOR_PIN)" : ` (guardado en ${path.join(DATA_DIR, "pin.txt")})`}`);
 });

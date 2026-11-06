@@ -89,8 +89,12 @@ function Message({ state }) {
   const name = (id) => players.find((p) => p.id === id)?.name;
   const subs = round ? Object.entries(round.subs || {}) : [];
   const firsts = subs.filter(([, x]) => x.first).sort((a, b) => a[1].at - b[1].at).map(([id]) => name(Number(id)));
+  const moves = (round && round.moves) || [];
   const counter = round && (
     <div className="muted" style={{ marginTop: 6 }}>
+      {moves.length > 0 && (
+        <div>Cambios pedidos: {moves.map((m) => `${name(m.from)} → asiento de ${name(m.to)}`).join(" · ")}</div>
+      )}
       Respuestas recibidas: <b className="mono">{subs.length}</b> de {players.length}
       {firsts.length > 0 && <> · "¡Primero!": {firsts.map((n, i) => `${i + 1}° ${n}`).join(", ")}</>}
     </div>
@@ -129,7 +133,7 @@ function Message({ state }) {
 }
 
 function Seats({ state, dispatch }) {
-  const { phase, round, players, config, seatCount, weights } = state;
+  const { phase, round, players, config, weights } = state;
   const [sel, setSel] = useState([]);
   const swapping = phase === "ready" || phase === "timing";
   useEffect(() => {
@@ -138,6 +142,7 @@ function Seats({ state, dispatch }) {
 
   const bySeat = {};
   players.forEach((p) => (bySeat[p.seat] = p));
+  const occupied = players.map((p) => p.seat).sort((a, b) => a - b);
   const used = (p) => (round ? round.swaps[p.id] || 0 : 0);
   const canSwap = (p) => p && !p.out && used(p) < config.swapLimit;
   const target = phase === "scoring" ? round.clue.target : null;
@@ -160,7 +165,7 @@ function Seats({ state, dispatch }) {
     hint =
       config.swapLimit === 0
         ? "En esta partida no se permiten intercambios."
-        : `Intercambios: toca los asientos en orden. Con 2 se cambian entre sí; con 3 o más, cada uno pasa al siguiente y el último al primero. Máximo ${config.swapLimit} por persona en esta ronda.`;
+        : `Los estudiantes piden los cambios desde el celular y el compañero los acepta. También puedes registrarlos aquí: toca los asientos en orden. Con 2 se cambian entre sí; con 3 o más, cada uno pasa al siguiente y el último al primero. Máximo ${config.swapLimit} por persona en esta ronda.`;
   else if (phase === "closed" || phase === "spinning") hint = "Intercambios cerrados.";
 
   return (
@@ -168,7 +173,7 @@ function Seats({ state, dispatch }) {
       <div className="front-label">tablero</div>
       <p className="muted" style={{ fontSize: 14 }}>{hint}</p>
       <div className="seat-grid" aria-label="Asientos del salón">
-        {Array.from({ length: seatCount }, (_, i) => i + 1).map((n) => {
+        {occupied.map((n) => {
           const p = bySeat[n];
           const w = weights[n] || 1;
           const k = ["seat"];

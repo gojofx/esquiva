@@ -32,6 +32,7 @@ export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripci
     pts.returnHits = Math.max(1, pts.returnHits);
     onSubmit({
       ...c,
+      classSeats: clamp(c.classSeats, 4, 99, 40),
       rounds: clamp(c.rounds, 1, 50, 8),
       seconds: clamp(c.seconds, 5, 600, 45),
       swapLimit: clamp(c.swapLimit, 0, 10, 1),
@@ -49,14 +50,18 @@ export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripci
           conserva hasta el final del juego.
         </p>
         <p className="muted">
-          Solo cuentan los asientos ocupados: el número de asiento de cada estudiante se asigna en la sala de inscripción, en el orden que
-          elijas.
+          Cada estudiante elige en su celular el número del asiento donde está sentado (de 1 al total de asientos del salón). Solo
+          cuentan los asientos ocupados: los vacíos no entran en la ruleta.
         </p>
       </div>
 
       <div className="panel">
         <h3>Reglas de esta partida</h3>
         <div className="form-grid">
+          <div className="field">
+            <label htmlFor="classSeats">Asientos del salón</label>
+            <input id="classSeats" type="number" min="4" max="99" value={c.classSeats} onChange={(e) => set("classSeats", e.target.value)} />
+          </div>
           <div className="field">
             <label htmlFor="rounds">Rondas (N)</label>
             <input id="rounds" type="number" min="1" max="50" value={c.rounds} onChange={(e) => set("rounds", e.target.value)} />

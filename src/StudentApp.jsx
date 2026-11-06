@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useSocket, store } from "./net.js";
 import ClueText from "./components/ClueText.jsx";
 import Rules from "./components/Rules.jsx";
@@ -61,8 +61,8 @@ function Me({ v }) {
         <h2 style={{ fontSize: 26 }}>{me.name}</h2>
       </div>
       <div className="seatbig">
-        {v.phase === "lobby" ? "—" : me.seat}
-        <small>{v.phase === "lobby" ? "asiento por asignar" : "tu asiento"}</small>
+        {me.seat || "—"}
+        <small>{me.seat ? "tu asiento" : "elige tu asiento"}</small>
       </div>
       <div className="mono">
         {me.out ? (
@@ -77,7 +77,7 @@ function Me({ v }) {
   );
 }
 
-function AnswerForm({ v, send, error }) {
+function AnswerForm({ v, send }) {
   const { clue, pts } = v;
   const exact = clue.kind === "exact";
   const [mode, setMode] = useState(exact ? "answer" : "list");
@@ -130,7 +130,6 @@ function AnswerForm({ v, send, error }) {
           <b className="minus">−{pts.firstFail}</b> extra.
         </span>
       </label>
-      {error && <div className="warnbar">{error}</div>}
       <button className="btn" type="submit" disabled={!valid}>Enviar respuesta (+{value})</button>
       <button className="btn ghost" type="button" onClick={skip}>No responder esta ronda</button>
     </form>
@@ -154,6 +153,97 @@ function Locked({ sub }) {
   );
 }
 
+function SeatPicker({ v, send }) {
+  const taken = new Map((v.taken || []).map((t) => [t.seat, t.name]));
+  return (
+    <div className="panel">
+      <h3>{v.me.seat ? `Estás en el asiento ${v.me.seat}` : "¿En qué asiento estás sentado?"}</h3>
+      <p className="muted" style={{ fontSize: 14 }}>
+        Toca el número de tu asiento. Puedes cambiarlo hasta que el profesor cierre las inscripciones.
+      </p>
+      <div className="pick-grid" role="group" aria-label="Asientos del salón">
+        {Array.from({ length: v.classSeats }, (_, i) => i + 1).map((n) => {
+          const who = taken.get(n);
+          const mine = v.me.seat === n;
+          return (
+            <button
+              key={n}
+              type="button"
+              className={"pick" + (mine ? " mine" : "")}
+              disabled={!!who}
+              aria-pressed={mine}
+              aria-label={who ? `Asiento ${n}, ocupado por ${who}` : `Asiento ${n}`}
+              onClick={() => !mine && send({ t: "seat", seat: n })}
+            >
+              {n}
+              <small>{mine ? "tú" : who || "libre"}</small>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function SwapPanel({ v, send }) {
+  const { incoming = [], outgoing, seatMap = [], swapsLeft, me } = v;
+  const canAsk = !me.out && swapsLeft > 0;
+  const ask = (t) => {
+    if (window.confirm(`¿Pedirle a ${t.name} cambiar de asiento? Tú pasarías al ${t.seat} y ${t.name} al ${me.seat}.`))
+      send({ t: "move-request", seat: t.seat });
+  };
+  return (
+    <>
+      {incoming.map((r) => (
+        <div className="incoming" key={r.id} role="alert">
+          <div>
+            <b>{r.name}</b> (asiento {r.seat}) quiere cambiar contigo: tú pasarías al asiento <b className="mono">{r.seat}</b> y {r.name} al{" "}
+            <b className="mono">{me.seat}</b>.
+          </div>
+          <div className="btn-row">
+            <button className="btn small" type="button" onClick={() => send({ t: "move-answer", id: r.id, accept: true })}>Aceptar</button>
+            <button className="btn ghost small" type="button" onClick={() => send({ t: "move-answer", id: r.id, accept: false })}>Rechazar</button>
+          </div>
+        </div>
+      ))}
+      {canAsk && (
+        <details className="panel" open={!!outgoing}>
+          <summary style={{ cursor: "pointer", fontFamily: "var(--font-display)", fontWeight: 600 }}>
+            ¿A qué asiento te vas a pasar? <span className="muted" style={{ fontWeight: 400 }}>(te quedan {swapsLeft})</span>
+          </summary>
+          {outgoing ? (
+            <div className="notebar" style={{ marginTop: 10 }}>
+              Le pediste a <b>{outgoing.name}</b> pasarte al asiento <b className="mono">{outgoing.seat}</b>. Espera a que acepte en su celular.
+              <div className="btn-row" style={{ marginTop: 8 }}>
+                <button className="btn ghost small" type="button" onClick={() => send({ t: "move-cancel" })}>Cancelar solicitud</button>
+              </div>
+            </div>
+          ) : (
+            <p className="muted" style={{ fontSize: 14, margin: "8px 0" }}>
+              Ningún asiento puede quedar vacío: el compañero de ese asiento pasa al tuyo, y tiene que aceptar.
+            </p>
+          )}
+          <div className="pick-grid" style={{ marginTop: 8 }}>
+            {seatMap.map((t) => (
+              <button
+                key={t.seat}
+                type="button"
+                className={"pick" + (outgoing && outgoing.seat === t.seat ? " req" : "")}
+                disabled={!t.free}
+                aria-label={`Asiento ${t.seat}, ${t.name}${t.out ? ", fuera" : !t.free ? ", sin intercambios" : ""}`}
+                onClick={() => ask(t)}
+              >
+                {t.seat}
+                <small>{t.name}</small>
+              </button>
+            ))}
+          </div>
+        </details>
+      )}
+    </>
+  );
+}
+
 function Breakdown({ parts }) {
   if (!parts || !parts.length) return null;
   return (
@@ -167,7 +257,7 @@ function Breakdown({ parts }) {
   );
 }
 
-function RoundView({ v, send, error }) {
+function RoundView({ v, send }) {
   const { phase, clue, mySub, me, pts, offset } = v;
   const left = useClock(v.endsAt, offset, phase === "timing");
   const open = phase === "ready" || phase === "timing";
@@ -186,14 +276,9 @@ function RoundView({ v, send, error }) {
       {me.out && open && (
         <div className="notebar">Estás fuera, pero sigue respondiendo: tus errores no restan y con {pts.returnHits} aciertos vuelves con {pts.returnScore} puntos.</div>
       )}
-      {open && !me.out && v.swapLimit > 0 && (
-        <p className="muted" style={{ fontSize: 14 }}>
-          ¿Tu asiento está en peligro? Puedes intercambiar con un compañero (te quedan {v.swapsLeft}). El profesor registra el cambio.
-        </p>
-      )}
-
-      {open && !mySub && <AnswerForm key={clue.text} v={v} send={send} error={error} />}
+      {open && !mySub && <AnswerForm key={clue.text} v={v} send={send} />}
       {mySub && <Locked sub={mySub} />}
+      {open && v.swapLimit > 0 && <SwapPanel v={v} send={send} />}
       {!open && !mySub && phase !== "scoring" && <div className="warnbar">Se cerró el tiempo y no enviaste respuesta.</div>}
 
       {(phase === "closed" || phase === "spinning") && (
@@ -272,7 +357,6 @@ export default function StudentApp() {
       setView(m.view ? { ...m.view, offset: m.view.serverNow - Date.now() } : null);
       if (m.view) setPhase(m.view.phase);
       else if (m.phase) setPhase(m.phase);
-      setError((e) => (m.view && m.view.mySub ? null : e));
     } else if (m.t === "error") {
       setError(m.msg);
       setPending(null);
@@ -281,6 +365,26 @@ export default function StudentApp() {
       setError(null);
     }
   }, []);
+
+  const [notice, setNotice] = useState(null);
+  const lastSeat = useRef(null);
+  const seat = view && view.me ? view.me.seat : null;
+  const inRound = view && view.phase !== "lobby";
+  useEffect(() => {
+    if (inRound && lastSeat.current && seat && seat !== lastSeat.current) setNotice(`Cambiaste de asiento: ahora estás en el ${seat}.`);
+    lastSeat.current = seat;
+  }, [seat, inRound]);
+  useEffect(() => {
+    if (!notice) return;
+    const t = setTimeout(() => setNotice(null), 6000);
+    return () => clearTimeout(t);
+  }, [notice]);
+  const registered = !!(view && view.me);
+  useEffect(() => {
+    if (!error || !registered) return;
+    const t = setTimeout(() => setError(null), 6000);
+    return () => clearTimeout(t);
+  }, [error, registered]);
 
   const { status, send } = useSocket(() => ({ t: "hello", role: "student", token: store.get(TOKEN_KEY) }), onMessage);
 
@@ -294,15 +398,18 @@ export default function StudentApp() {
       <>
         <Me v={v} />
         {v.phase === "lobby" && (
-          <div className="panel">
-            <h3>¡Listo, estás inscrito!</h3>
-            <p className="muted">Espera a que el profesor cierre las inscripciones. Ya hay {v.count} inscritos.</p>
-            <p style={{ fontSize: 14 }}>{(v.lobby || []).join(" · ")}</p>
-          </div>
+          <>
+            <SeatPicker v={v} send={send} />
+            <p className="muted" style={{ textAlign: "center" }}>
+              {v.me.seat ? "¡Listo! Espera a que el profesor empiece la partida." : "Elige tu asiento para quedar listo."} Hay {v.count} inscritos.
+            </p>
+          </>
         )}
-        {v.clue && ["ready", "timing", "closed", "spinning", "scoring"].includes(v.phase) && <RoundView v={v} send={send} error={error} />}
+        {notice && <div className="notebar">{notice}</div>}
+        {v.clue && ["ready", "timing", "closed", "spinning", "scoring"].includes(v.phase) && <RoundView v={v} send={send} />}
         {v.phase === "idle" && <Waiting v={v} />}
         {v.phase === "finished" && <FinishedView v={v} />}
+        {error && <div className="warnbar toast" role="alert">{error}</div>}
       </>
     );
   }
