@@ -43,7 +43,8 @@ export const initialState = {
   weights: {},
   seatCount: 0,
   roundNo: 0,
-  phase: "setup", // setup | idle | ready | timing | closed | spinning | scoring | finished
+  phase: "setup", // setup | lobby | idle | ready | timing | closed | spinning | scoring | finished
+  nextId: 1,
   round: null,
   log: [],
   prev: null,
@@ -119,6 +120,29 @@ export function scoreRound(s) {
   });
 }
 
+export const MAX_NAME = 30;
+export const cleanName = (n) =>
+  String(n || "")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_NAME);
+export const sameName = (a, b) => a.toLocaleLowerCase("es") === b.toLocaleLowerCase("es");
+
+// Califica lo que envió un estudiante desde su celular.
+export function grade(clue, sub) {
+  if (!sub || sub.mode === "blank") return "blank";
+  const nums = sub.nums || [];
+  if (clue.kind === "exact") return nums.length === 1 && nums[0] === clue.target ? "correct" : "wrong";
+  if (sub.mode === "bet") return nums.length === 1 && nums[0] === clue.target ? "bet" : "wrong";
+  const got = [...new Set(nums)].sort((a, b) => a - b);
+  const want = [...clue.cands].sort((a, b) => a - b);
+  return got.length === want.length && got.every((n, i) => n === want[i]) ? "list" : "wrong";
+}
+
+export const canSubmit = (s, now = Date.now()) =>
+  (s.phase === "ready" || s.phase === "timing") && !!s.round && (!s.round.endsAt || now <= s.round.endsAt + 500);
+
 function strip(s) {
   const { prev, ...rest } = s;
   return rest;
@@ -137,19 +161,39 @@ function checkLow(s, log) {
 
 export function reducer(s, action) {
   switch (action.type) {
-    case "NEW_GAME": {
-      const { config, names } = action;
-      const players = names.map((name, i) => ({
-        id: i + 1,
-        name,
-        seat: i + 1,
-        score: config.pts.start,
-        out: false,
-        outHits: 0,
-      }));
+    case "OPEN_LOBBY":
+      if (s.phase !== "setup") return s;
+      return { ...initialState, config: action.config, phase: "lobby" };
+    case "SET_CONFIG":
+      if (s.phase !== "lobby") return s;
+      return { ...s, config: action.config, players: s.players.map((p) => ({ ...p, score: action.config.pts.start })) };
+    case "REGISTER":
+    case "ADD_MANUAL": {
+      if (s.phase !== "lobby" || s.players.length >= 60) return s;
+      const name = cleanName(action.name);
+      if (!name || s.players.some((p) => sameName(p.name, name))) return s;
+      const p = { id: s.nextId, name, seat: s.players.length + 1, score: s.config.pts.start, out: false, outHits: 0 };
+      return { ...s, nextId: s.nextId + 1, players: [...s.players, p] };
+    }
+    case "REMOVE_PLAYER": {
+      if (s.phase !== "lobby") return s;
+      const players = s.players.filter((p) => p.id !== action.id).map((p, i) => ({ ...p, seat: i + 1 }));
+      return { ...s, players };
+    }
+    case "MOVE_PLAYER": {
+      if (s.phase !== "lobby") return s;
+      const i = s.players.findIndex((p) => p.id === action.id), j = i + action.dir;
+      if (i < 0 || j < 0 || j >= s.players.length) return s;
+      const players = [...s.players];
+      [players[i], players[j]] = [players[j], players[i]];
+      return { ...s, players: players.map((p, k) => ({ ...p, seat: k + 1 })) };
+    }
+    case "START_GAME": {
+      if (s.phase !== "lobby" || s.players.length < 4) return s;
+      const players = s.players.map((p, i) => ({ ...p, seat: i + 1, score: s.config.pts.start, out: false, outHits: 0 }));
       const weights = {};
       players.forEach((p) => (weights[p.seat] = 1));
-      return { ...initialState, config, players, weights, seatCount: players.length, phase: "idle" };
+      return { ...s, players, weights, seatCount: players.length, phase: "idle" };
     }
     case "RESET":
       return { ...initialState, config: s.config };
@@ -164,7 +208,7 @@ export function reducer(s, action) {
       if (seats.length < 2) return s;
       const target = weightedPick(seats, (n) => s.weights[n] || 1);
       const clue = makeClue(target, seats, s.config.clueType, s.config.level);
-      return { ...s, phase: "ready", round: { clue, swaps: {}, answers: {}, first: [], endsAt: null } };
+      return { ...s, phase: "ready", round: { clue, swaps: {}, answers: {}, first: [], subs: {}, endsAt: null } };
     }
     case "REROLL_CLUE": {
       if (s.phase !== "ready") return s;
@@ -197,9 +241,27 @@ export function reducer(s, action) {
     case "SPIN":
       if (!["ready", "timing", "closed"].includes(s.phase)) return s;
       return { ...s, phase: "spinning" };
-    case "SPIN_DONE":
+    case "SUBMIT": {
+      // Lo genera el servidor a partir del mensaje de un celular.
+      if (!canSubmit(s, action.at)) return s;
+      const p = s.players.find((x) => x.id === action.id);
+      if (!p || s.round.subs[p.id]) return s;
+      const sub = { mode: action.mode, nums: action.nums, first: action.first && action.mode !== "blank", at: action.at };
+      return { ...s, round: { ...s.round, subs: { ...s.round.subs, [p.id]: sub } } };
+    }
+    case "SPIN_DONE": {
       if (s.phase !== "spinning") return s;
-      return { ...s, phase: "scoring" };
+      // Precarga las respuestas y el orden de "¡Primero!" con lo que enviaron los celulares.
+      const subs = s.round.subs || {};
+      const answers = { ...s.round.answers };
+      Object.entries(subs).forEach(([id, sub]) => (answers[id] = grade(s.round.clue, sub)));
+      const declared = Object.entries(subs)
+        .filter(([, sub]) => sub.first)
+        .sort((a, b) => a[1].at - b[1].at)
+        .map(([id]) => Number(id));
+      const first = [...declared, ...s.round.first.filter((id) => !declared.includes(id))];
+      return { ...s, phase: "scoring", round: { ...s.round, answers, first } };
+    }
     case "SET_ANSWER":
       if (s.phase !== "scoring") return s;
       return { ...s, round: { ...s.round, answers: { ...s.round.answers, [action.id]: action.answer } } };
@@ -253,8 +315,6 @@ export function reducer(s, action) {
       return s.tiebreak ? { ...s, tiebreak: { ...s.tiebreak, showSolve: true } } : s;
     case "SET_WINNER":
       return { ...s, winnerId: action.id };
-    case "LOAD":
-      return action.state;
     default:
       return s;
   }

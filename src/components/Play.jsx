@@ -3,24 +3,22 @@ import { activeSeats, activePlayers, ANSWERS, scoreRound } from "../game/engine.
 import Wheel from "./Wheel.jsx";
 import ClueText from "./ClueText.jsx";
 import Finished from "./Finished.jsx";
+import Claims from "./Claims.jsx";
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 const signed = (n) => (n > 0 ? `+${n}` : `${n}`);
 const cls = (n) => (n > 0 ? "plus" : n < 0 ? "minus" : "zero");
 
-function Clock({ state, dispatch }) {
+function Clock({ state, offset }) {
   const { phase, round, config } = state;
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(Date.now() + offset);
   useEffect(() => {
     if (phase !== "timing") return;
-    const id = setInterval(() => setNow(Date.now()), 250);
+    const id = setInterval(() => setNow(Date.now() + offset), 250);
     return () => clearInterval(id);
-  }, [phase]);
+  }, [phase, offset]);
   const left =
     phase === "timing" ? Math.max(0, Math.ceil((round.endsAt - now) / 1000)) : ["idle", "ready"].includes(phase) ? config.seconds : 0;
-  useEffect(() => {
-    if (phase === "timing" && left <= 0) dispatch({ type: "CLOSE" });
-  }, [phase, left, dispatch]);
   return (
     <div className={"clock" + (left <= 0 ? " done" : "")} aria-live="off">
       {fmt(left)}
@@ -55,11 +53,11 @@ function CluePanel({ state }) {
   );
 }
 
-function Controls({ state, dispatch }) {
+function Controls({ state, dispatch, offset }) {
   const { phase } = state;
   return (
     <div className="status">
-      <Clock state={state} dispatch={dispatch} />
+      <Clock state={state} offset={offset} />
       <div className="btn-row">
         {phase === "idle" && (
           <button className="btn" type="button" onClick={() => dispatch({ type: "NEW_ROUND" })} disabled={activeSeats(state).length < 2}>
@@ -89,11 +87,19 @@ function Controls({ state, dispatch }) {
 function Message({ state }) {
   const { phase, round, log, players } = state;
   const name = (id) => players.find((p) => p.id === id)?.name;
+  const subs = round ? Object.entries(round.subs || {}) : [];
+  const firsts = subs.filter(([, x]) => x.first).sort((a, b) => a[1].at - b[1].at).map(([id]) => name(Number(id)));
+  const counter = round && (
+    <div className="muted" style={{ marginTop: 6 }}>
+      Respuestas recibidas: <b className="mono">{subs.length}</b> de {players.length}
+      {firsts.length > 0 && <> · "¡Primero!": {firsts.map((n, i) => `${i + 1}° ${n}`).join(", ")}</>}
+    </div>
+  );
   if (phase === "ready")
-    return <div className="result muted">El asiento ya está elegido. Inicia el tiempo para que resuelvan e intercambien.</div>;
+    return <div className="result muted">El asiento ya está elegido. Inicia el tiempo para que resuelvan e intercambien.{counter}</div>;
   if (phase === "timing")
-    return <div className="result">Corre el tiempo: resuelvan en la hoja e intercambien asientos. Al terminar, todo se cierra.</div>;
-  if (phase === "closed") return <div className="result"><b>Tiempo.</b> Hojas e intercambios cerrados. Ya se puede girar.</div>;
+    return <div className="result">Corre el tiempo: resuelvan, respondan en el celular e intercambien asientos. Al terminar, todo se cierra.{counter}</div>;
+  if (phase === "closed") return <div className="result"><b>Tiempo.</b> Respuestas e intercambios cerrados. Ya se puede girar.{counter}</div>;
   if (phase === "spinning") return <div className="result muted">La ruleta está girando…</div>;
   if (phase === "scoring") {
     const t = round.clue.target;
@@ -188,6 +194,7 @@ function Seats({ state, dispatch }) {
               <span className="sc">{p.out ? `fuera · ${p.outHits}/${config.pts.returnHits}` : `${p.score} pts`}</span>
               {w > 1 && !p.out && <span className="w">×{w}</span>}
               {sel.includes(n) && <span className="ord">{sel.indexOf(n) + 1}</span>}
+              {!sel.includes(n) && round && round.subs?.[p.id] && phase !== "scoring" && <span className="sent" title="Ya respondió">✓</span>}
             </button>
           );
         })}
@@ -213,6 +220,13 @@ function Seats({ state, dispatch }) {
   );
 }
 
+function describeSub(sub) {
+  if (!sub) return <span className="zero">—</span>;
+  if (sub.mode === "blank") return <span className="zero">no responde</span>;
+  const prefix = sub.mode === "list" ? "lista: " : sub.mode === "bet" ? "apuesta: " : "";
+  return prefix + sub.nums.join(", ");
+}
+
 function Scoring({ state, dispatch }) {
   const { round, players } = state;
   const results = scoreRound(state);
@@ -236,12 +250,12 @@ function Scoring({ state, dispatch }) {
         {round.clue.kind === "exact"
           ? `Respuesta correcta: ${target}.`
           : `Lista correcta: ${round.clue.cands.join(", ")}. Apuesta correcta: ${target}.`}{" "}
-        Pulsa "Primero" en el orden en que se declararon; el bono es para el primero que acertó.
+        Las respuestas enviadas desde los celulares ya están calificadas; corrige si hace falta. Para quien no tiene celular, márcalas a mano y pulsa "Primero" en el orden en que se declararon. El bono es para el primero que acertó.
       </p>
       <div className="table-wrap">
         <table className="score-table">
           <thead>
-            <tr><th>Asiento</th><th>Estudiante</th><th>Respuesta</th><th>¿Primero?</th><th>Puntos</th><th>Total</th></tr>
+            <tr><th>Asiento</th><th>Estudiante</th><th>Envió</th><th>Respuesta</th><th>¿Primero?</th><th>Puntos</th><th>Total</th></tr>
           </thead>
           <tbody>
             {rows.map((r) => {
@@ -255,6 +269,7 @@ function Scoring({ state, dispatch }) {
                     {p.out && <span className="tag-mini zero">FUERA {p.outHits}/{state.config.pts.returnHits}</span>}
                     {p.seat === target && !p.out && <span className="tag-mini minus">LE CAYÓ</span>}
                   </td>
+                  <td className="mono" style={{ fontSize: 14 }}>{describeSub(round.subs?.[p.id])}</td>
                   <td>
                     <div className="seg" role="group" aria-label={`Respuesta de ${p.name}`}>
                       {opts.map((o) => (
@@ -311,14 +326,15 @@ function Scoring({ state, dispatch }) {
   );
 }
 
-export default function Play({ state, dispatch }) {
+export default function Play({ data, dispatch, resolveClaim }) {
+  const { state, offset, claims } = data;
   const { phase, roundNo, config, round, weights } = state;
   const seats = activeSeats(state);
   const segments = seats.map((n) => ({ n, weight: weights[n] || 1 }));
   const totalW = segments.reduce((t, s) => t + s.weight, 0);
 
   const reset = () => {
-    if (window.confirm("¿Empezar una partida nueva? Se perderán los puntajes actuales.")) dispatch({ type: "RESET" });
+    if (window.confirm("¿Empezar una partida nueva? Se perderán los puntajes y las inscripciones.")) dispatch({ type: "RESET" });
   };
 
   if (phase === "finished") return <Finished state={state} dispatch={dispatch} onReset={reset} />;
@@ -348,10 +364,12 @@ export default function Play({ state, dispatch }) {
         </div>
       </div>
 
+      <Claims claims={claims} resolveClaim={resolveClaim} />
+
       <div className="play-grid">
         <div className="panel">
           <CluePanel state={state} />
-          <Controls state={state} dispatch={dispatch} />
+          <Controls state={state} dispatch={dispatch} offset={offset} />
           <Message state={state} />
         </div>
         <div className="panel">

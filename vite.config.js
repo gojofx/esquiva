@@ -1,8 +1,9 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// base relativa: funciona en https://<usuario>.github.io/<repositorio>/ sin configurar el nombre.
 export default defineConfig({
   plugins: [react()],
   base: "./",
+  // En desarrollo (npm run dev) el WebSocket va al servidor Node (npm start) en el puerto 3000.
+  server: { proxy: { "/ws": { target: "ws://localhost:3000", ws: true } } },
 });

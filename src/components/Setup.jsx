@@ -20,65 +20,38 @@ const clamp = (v, lo, hi, def) => {
   return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : def;
 };
 
-export default function Setup({ config, onStart }) {
-  const [count, setCount] = useState(24);
-  const [namesText, setNamesText] = useState("");
+export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripciones", onCancel }) {
   const [c, setC] = useState(config);
   const set = (k, v) => setC((x) => ({ ...x, [k]: v }));
   const setPt = (k, v) => setC((x) => ({ ...x, pts: { ...x.pts, [k]: v } }));
 
-  const names = namesText
-    .split("\n")
-    .map((x) => x.trim())
-    .filter(Boolean);
-  const total = names.length || clamp(count, 4, 60, 24);
-  const tooFew = names.length > 0 && names.length < 4;
-
-  const start = (e) => {
+  const submit = (e) => {
     e.preventDefault();
-    if (tooFew) return;
-    const list = names.length ? names.slice(0, 60) : Array.from({ length: total }, (_, i) => `Estudiante ${i + 1}`);
     const pts = {};
     for (const [k] of POINT_FIELDS) pts[k] = clamp(c.pts[k], 0, 99, DEFAULT_POINTS[k]);
     pts.returnHits = Math.max(1, pts.returnHits);
-    onStart(
-      {
-        ...c,
-        rounds: clamp(c.rounds, 1, 50, 8),
-        seconds: clamp(c.seconds, 5, 600, 45),
-        swapLimit: clamp(c.swapLimit, 0, 10, 1),
-        level: clamp(c.level, 1, 4, 2),
-        pts,
-      },
-      list
-    );
+    onSubmit({
+      ...c,
+      rounds: clamp(c.rounds, 1, 50, 8),
+      seconds: clamp(c.seconds, 5, 600, 45),
+      swapLimit: clamp(c.swapLimit, 0, 10, 1),
+      level: clamp(c.level, 1, 4, 2),
+      pts,
+    });
   };
 
   return (
-    <form className="wrap setup-grid" onSubmit={start}>
+    <form className="wrap setup-grid" onSubmit={submit}>
       <div className="panel">
-        <h2>Nueva partida</h2>
+        <h2>{onCancel ? "Reglas de la partida" : "Nueva partida"}</h2>
         <p className="muted">
-          Solo cuentan los asientos ocupados. Cada estudiante recibe el número de su asiento en el orden de la lista (el primero es el
-          asiento 1).
+          Define las reglas. Después se abren las inscripciones: cada estudiante entra desde su celular y escribe su nombre. Ese nombre se
+          conserva hasta el final del juego.
         </p>
-        <div className="field">
-          <label htmlFor="names">Nombres de los estudiantes (uno por línea, opcional)</label>
-          <textarea
-            id="names"
-            value={namesText}
-            onChange={(e) => setNamesText(e.target.value)}
-            placeholder={"Valentina\nSantiago\nMariana\n…"}
-          />
-          <small>{names.length ? `${names.length} estudiantes en la lista` : "Si la dejas vacía, se usan números."}</small>
-        </div>
-        {!names.length && (
-          <div className="field" style={{ maxWidth: 220 }}>
-            <label htmlFor="count">Asientos ocupados</label>
-            <input id="count" type="number" min="4" max="60" value={count} onChange={(e) => setCount(e.target.value)} />
-          </div>
-        )}
-        {tooFew && <div className="warnbar">Se necesitan al menos 4 estudiantes.</div>}
+        <p className="muted">
+          Solo cuentan los asientos ocupados: el número de asiento de cada estudiante se asigna en la sala de inscripción, en el orden que
+          elijas.
+        </p>
       </div>
 
       <div className="panel">
@@ -135,9 +108,8 @@ export default function Setup({ config, onStart }) {
 
         <p className="muted">La tendencia (probabilidad) de cada asiento se ajusta en la pantalla de juego, tocando los asientos entre rondas.</p>
         <div className="btn-row">
-          <button className="btn" type="submit" disabled={tooFew}>
-            Empezar con {total} estudiantes
-          </button>
+          <button className="btn" type="submit">{submitLabel}</button>
+          {onCancel && <button className="btn ghost" type="button" onClick={onCancel}>Cancelar</button>}
         </div>
       </div>
     </form>
