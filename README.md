@@ -45,38 +45,51 @@ createdb esquiva   # o: psql -c "create database esquiva"
 
 Variables: `DB_HOST` (localhost), `DB_PORT` (5432), `DB_DATABASE` (esquiva), `DB_USERNAME`, `DB_PASSWORD`, `DB_SSL=true` para conexiones cifradas.
 
-### Detrás de nginx (HTTPS)
+## Despliegue con nginx
 
-El WebSocket está en `/ws`; el proxy debe dejar pasar la actualización de conexión:
+nginx sirve la página compilada (`dist/`) y reenvía el WebSocket `/ws` al servidor Node, que escucha solo en `127.0.0.1:3000`. Los archivos están en [`deploy/`](deploy/):
 
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:3000;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection "upgrade";
-    proxy_set_header Host $host;
-    proxy_read_timeout 3600s;
-}
+| Archivo | Para qué |
+|---|---|
+| `deploy/nginx-esquiva.conf` | Sitio en un dominio o subdominio propio (`https://esquiva.tu-dominio.com/`). |
+| `deploy/nginx-esquiva-subruta.conf` | Bloques para pegar en un sitio existente y publicarlo en `https://tu-dominio.com/esquiva/`. |
+| `deploy/esquiva.service` | Servicio systemd que mantiene el servidor Node encendido. |
+
+### Pasos (Debian/Ubuntu)
+
+```bash
+# 1. Usuario y código
+sudo useradd --system --home /opt/esquiva --shell /usr/sbin/nologin esquiva
+sudo git clone <url-del-repositorio> /opt/esquiva     # o copiar la carpeta
+cd /opt/esquiva
+sudo npm ci && sudo npm run build
+sudo mkdir -p data && sudo chown -R esquiva:esquiva data
+
+# 2. Configuración (PIN y base de datos)
+sudo cp .env.example .env && sudo nano .env
+sudo chown esquiva:esquiva .env && sudo chmod 600 .env
+
+# 3. Servicio
+sudo cp deploy/esquiva.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now esquiva
+journalctl -u esquiva -n 20          # muestra el PIN si no se definió PROFESOR_PIN
+
+# 4. nginx (cambiar server_name en el archivo)
+sudo cp deploy/nginx-esquiva.conf /etc/nginx/sites-available/esquiva
+sudo ln -s /etc/nginx/sites-available/esquiva /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# 5. HTTPS (recomendado)
+sudo certbot --nginx -d esquiva.tu-dominio.com
 ```
 
-### Como servicio (systemd)
+Con HTTPS la página usa `wss://` automáticamente. Para actualizar: `git pull && npm ci && npm run build && sudo systemctl restart esquiva` (nginx no necesita reiniciarse).
 
-```ini
-[Unit]
-Description=Ruleta de Asientos
-After=network.target
+Claves de la configuración de nginx:
 
-[Service]
-WorkingDirectory=/opt/ruleta-de-asientos
-Environment=PORT=3000 PROFESOR_PIN=123456
-ExecStart=/usr/bin/node server/index.js
-Restart=always
-User=www-data
-
-[Install]
-WantedBy=multi-user.target
-```
+- `proxy_set_header Upgrade` / `Connection`: sin ellas el WebSocket no conecta y los celulares quedan en "conectando…".
+- `proxy_read_timeout 1h`: evita que nginx corte la conexión durante una ronda larga (por defecto son 60 s; el servidor además envía un ping cada 20 s).
+- `try_files $uri /index.html`: cualquier ruta carga la página. El profesor entra por `/#profesor`.
 
 ## Desarrollo
 

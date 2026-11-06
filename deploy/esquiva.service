@@ -1,0 +1,25 @@
+# Servicio systemd: copiar a /etc/systemd/system/esquiva.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now esquiva
+[Unit]
+Description=Ruleta de Asientos (servidor del juego)
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=esquiva
+Group=esquiva
+WorkingDirectory=/opt/esquiva
+# Lee PORT, PROFESOR_PIN y DB_* de /opt/esquiva/.env
+Environment=NODE_ENV=production HOST=127.0.0.1
+ExecStart=/usr/bin/node server/index.js
+Restart=always
+RestartSec=2
+# Endurecimiento básico: solo puede escribir en data/
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/esquiva/data
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
