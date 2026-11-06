@@ -106,6 +106,17 @@ Claves de la configuración de nginx:
 - `proxy_read_timeout 1h`: evita que nginx corte la conexión durante una ronda larga (por defecto son 60 s; el servidor además envía un ping cada 20 s).
 - `try_files $uri /index.html`: cualquier ruta (como `/profesor`) carga la página.
 
+### Producción: esquiva.undubb.online
+
+El servidor tiene un clon de este repositorio en `/var/www/html/esquiva`: servicio systemd `esquiva` (`deploy/esquiva.undubb.online.service`) y nginx (`deploy/esquiva.undubb.online.conf` + `deploy/esquiva-api.conf` en `snippets/`), detrás de Cloudflare. Para publicar cambios:
+
+```bash
+git push                                                      # en tu equipo
+ssh clouding sh /var/www/html/esquiva/deploy/actualizar.sh    # pull, build y reinicio
+```
+
+Si cambian los archivos de nginx, copiarlos a `/etc/nginx/sites-available/esquiva` y `/etc/nginx/snippets/esquiva-api.conf` y ejecutar `nginx -t && systemctl reload nginx`.
+
 ## Desarrollo
 
 ```bash
