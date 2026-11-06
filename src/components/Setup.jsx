@@ -38,7 +38,7 @@ export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripci
       swapLimit: clamp(c.swapLimit, 0, 10, 1),
       level: clamp(c.level, 1, 5, 2),
       watch: ["game", "rounds", "off"].includes(c.watch) ? c.watch : "game",
-      graceSec: clamp(c.graceSec, 0, 10, 0),
+      graceSec: clamp(c.graceSec, 0, 10, 5),
       pts,
     });
   };
@@ -110,7 +110,7 @@ export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripci
           <div className="field">
             <label htmlFor="grace">Tolerancia al salir (segundos)</label>
             <input id="grace" type="number" min="0" max="10" value={c.graceSec} disabled={c.watch === "off"} onChange={(e) => set("graceSec", e.target.value)} />
-            <small>0 = se cancela de inmediato</small>
+            <small>Recomendado: 5. Con 0 se cancela de inmediato.</small>
           </div>
         </div>
 

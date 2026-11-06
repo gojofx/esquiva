@@ -23,7 +23,7 @@ export const DEFAULT_CONFIG = {
   lowPolicy: "reintegrate",
   // Vigilancia del celular: "game" toda la partida, "rounds" solo con pista en pantalla, "off" desactivada.
   watch: "game",
-  graceSec: 0,
+  graceSec: 5, // segundos fuera de la página antes de cancelar
   pts: DEFAULT_POINTS,
 };
 

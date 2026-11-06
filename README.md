@@ -28,7 +28,7 @@ Durante la partida (o solo con pista en pantalla, según se configure), si el ce
 
 El aviso se envía por el WebSocket y además por `sendBeacon`; si no hay conexión en ese instante, se guarda y se reenvía al reconectar. Para evitar falsos positivos, la página pide que la pantalla no se apague (Wake Lock, requiere HTTPS) y usa ventanas de confirmación propias en vez de `confirm()`.
 
-Límites: un navegador no puede **impedir** salir, solo detectarlo; tampoco puede detectar otro dispositivo (otro celular o una calculadora física). Una llamada entrante o bajar la barra de notificaciones también cuentan como salir: para eso está **Readmitir**. Opciones al crear la partida: vigilancia en toda la partida / solo con pista en pantalla / desactivada, y segundos de tolerancia (0 = inmediato).
+Límites: un navegador no puede **impedir** salir, solo detectarlo; tampoco puede detectar otro dispositivo (otro celular o una calculadora física). Una llamada entrante o bajar la barra de notificaciones también cuentan como salir: para eso está **Readmitir**. Opciones al crear la partida: vigilancia en toda la partida / solo con pista en pantalla / desactivada, y segundos de tolerancia (por defecto 5; 0 = inmediato).
 
 ## Instalación en el servidor
 
