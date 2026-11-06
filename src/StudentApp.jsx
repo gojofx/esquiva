@@ -3,7 +3,8 @@ import { useSocket, store } from "./net.js";
 import { Brand, Logo } from "./components/Icons.jsx";
 import ClueText from "./components/ClueText.jsx";
 import Rules from "./components/Rules.jsx";
-import { DEFAULT_POINTS } from "./game/engine.js";
+import { DEFAULT_POINTS, WITHDRAW_REASONS } from "./game/engine.js";
+import { useLeaveWatch, pendingLeave, looksSplit } from "./watch.js";
 
 const TOKEN_KEY = "ruleta-estudiante-token";
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -78,7 +79,7 @@ function Me({ v }) {
   );
 }
 
-function AnswerForm({ v, send }) {
+function AnswerForm({ v, send, confirm }) {
   const { clue, pts } = v;
   const exact = clue.kind === "exact";
   const [mode, setMode] = useState(exact ? "answer" : "list");
@@ -89,15 +90,15 @@ function AnswerForm({ v, send }) {
   const valid = single ? nums.length === 1 : nums.length >= 1;
   const value = mode === "answer" ? pts.exact : mode === "list" ? pts.list : pts.bet;
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
     if (!valid) return;
     const what = mode === "list" ? `la lista ${nums.join(", ")}` : `el ${nums[0]}`;
     const msg = `¿Enviar ${what}${first ? " declarándote primero" : ""}? Lo enviado queda escrito: no se puede cambiar.`;
-    if (window.confirm(msg)) send({ t: "submit", mode, nums, first });
+    if (await confirm(msg, "Sí, enviar")) send({ t: "submit", mode, nums, first });
   };
-  const skip = () => {
-    if (window.confirm("¿No responder esta ronda? No ganas ni pierdes puntos por la respuesta.")) send({ t: "submit", mode: "blank" });
+  const skip = async () => {
+    if (await confirm("¿No responder esta ronda? No ganas ni pierdes puntos por la respuesta.", "Sí, no responder")) send({ t: "submit", mode: "blank" });
   };
 
   return (
@@ -186,11 +187,11 @@ function SeatPicker({ v, send }) {
   );
 }
 
-function SwapPanel({ v, send }) {
+function SwapPanel({ v, send, confirm }) {
   const { incoming = [], outgoing, seatMap = [], swapsLeft, me } = v;
   const canAsk = !me.out && swapsLeft > 0;
-  const ask = (t) => {
-    if (window.confirm(`¿Pedirle a ${t.name} cambiar de asiento? Tú pasarías al ${t.seat} y ${t.name} al ${me.seat}.`))
+  const ask = async (t) => {
+    if (await confirm(`¿Pedirle a ${t.name} cambiar de asiento? Tú pasarías al ${t.seat} y ${t.name} al ${me.seat}.`, "Sí, pedir cambio"))
       send({ t: "move-request", seat: t.seat });
   };
   return (
@@ -263,7 +264,7 @@ function Breakdown({ parts }) {
   );
 }
 
-function RoundView({ v, send }) {
+function RoundView({ v, send, confirm }) {
   const { phase, clue, mySub, me, pts, offset } = v;
   const left = useClock(v.endsAt, offset, phase === "timing");
   const open = phase === "ready" || phase === "timing";
@@ -285,9 +286,9 @@ function RoundView({ v, send }) {
       {me.out && open && (
         <div className="notebar">Estás fuera, pero sigue respondiendo: tus errores no restan y con {pts.returnHits} aciertos vuelves con {pts.returnScore} puntos.</div>
       )}
-      {open && !mySub && <AnswerForm key={clue.text} v={v} send={send} />}
+      {open && !mySub && <AnswerForm key={clue.text} v={v} send={send} confirm={confirm} />}
       {mySub && <Locked sub={mySub} />}
-      {open && v.swapLimit > 0 && <SwapPanel v={v} send={send} />}
+      {open && v.swapLimit > 0 && <SwapPanel v={v} send={send} confirm={confirm} />}
       {!open && !mySub && phase !== "scoring" && <div className="warnbar">Se cerró el tiempo y no enviaste respuesta.</div>}
 
       {(phase === "closed" || phase === "spinning") && (
@@ -333,6 +334,61 @@ function Waiting({ v }) {
   );
 }
 
+// Ventana de confirmación dentro de la página: los diálogos nativos (confirm) pueden quitar el foco.
+function ConfirmDialog({ ask, onClose }) {
+  if (!ask) return null;
+  return (
+    <div className="modal-back" role="dialog" aria-modal="true" aria-labelledby="cf-msg">
+      <div className="modal">
+        <p id="cf-msg">{ask.msg}</p>
+        <div className="btn-row">
+          <button className="btn small" type="button" autoFocus onClick={() => onClose(true)}>{ask.ok || "Sí"}</button>
+          <button className="btn ghost small" type="button" onClick={() => onClose(false)}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FairPlay({ v }) {
+  const [split, setSplit] = useState(looksSplit);
+  useEffect(() => {
+    const f = () => setSplit(looksSplit());
+    window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, []);
+  if (!v.watch || v.watch.mode === "off") return null;
+  return (
+    <div className="panel fair">
+      <h3>Juego limpio</h3>
+      <p style={{ fontSize: 15 }}>
+        {v.watch.mode === "game" ? "Desde que empiece la partida hasta el final" : "Mientras haya una pista en pantalla"},{" "}
+        <b>no salgas de esta página</b>. Si cambias de aplicación (por ejemplo, a la calculadora), minimizas el navegador, cambias de pestaña,
+        bloqueas la pantalla o usas pantalla dividida, <b>tu participación se cancela de inmediato</b>
+        {v.watch.grace ? ` (después de ${v.watch.grace} s fuera)` : ""}.
+      </p>
+      {split && <div className="warnbar">Parece que estás en pantalla dividida o en una ventana pequeña. Pon el navegador en pantalla completa antes de empezar.</div>}
+    </div>
+  );
+}
+
+function Withdrawn({ me }) {
+  const w = me.withdrawn;
+  const when = new Date(w.at).toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  return (
+    <div className="panel withdrawn" role="alert">
+      <div className="hand" style={{ fontSize: 28, color: "var(--danger)" }}>Participación cancelada</div>
+      <p>
+        A las <b>{when}</b> (ronda {w.roundNo}) {WITHDRAW_REASONS[w.reason] || "saliste de la página"}. Según las reglas, eso cuenta como
+        desistir de participar.
+      </p>
+      <p className="muted" style={{ fontSize: 14 }}>
+        Tus puntos quedan como estaban ({me.score}). Si fue un error (por ejemplo, una llamada entrante), habla con el profesor: puede readmitirte.
+      </p>
+    </div>
+  );
+}
+
 function FinishedView({ v }) {
   return (
     <div className="panel">
@@ -343,6 +399,7 @@ function FinishedView({ v }) {
         {v.ranking.map((r, i) => (
           <li key={i} style={r.me ? { color: "var(--yellow)", fontWeight: 700 } : undefined}>
             {r.name} · <span className="mono">{r.score}</span>
+            {r.withdrawn && <span className="tag-mini minus">retirado</span>}
           </li>
         ))}
       </ol>
@@ -397,6 +454,33 @@ export default function StudentApp() {
 
   const { status, send } = useSocket(() => ({ t: "hello", role: "student", token: store.get(TOKEN_KEY) }), onMessage);
 
+  const [ask, setAsk] = useState(null);
+  const confirm = useCallback((msg, ok) => new Promise((resolve) => setAsk({ msg, ok, resolve })), []);
+  const closeAsk = (ok) => {
+    ask && ask.resolve(ok);
+    setAsk(null);
+  };
+
+  // Vigilancia: salir de la página cancela la participación.
+  const watching = !!(view && view.me && view.watch && view.watch.active && !view.me.withdrawn);
+  useLeaveWatch({
+    enabled: watching,
+    grace: (view && view.watch && view.watch.grace) || 0,
+    token: store.get(TOKEN_KEY),
+    report: (reason) => send({ t: "leave", reason }),
+  });
+  // Si el aviso no llegó (sin conexión en ese momento), se reenvía al reconectar.
+  const withdrawnNow = !!(view && view.me && view.me.withdrawn);
+  useEffect(() => {
+    const p = pendingLeave.get();
+    if (!p || !view || !view.me) return;
+    if (withdrawnNow || !watching) return pendingLeave.clear();
+    if (status !== "online") return;
+    const grace = (view.watch && view.watch.grace) || 0;
+    if (Date.now() - p.at >= grace * 1000) send({ t: "leave", reason: p.reason });
+    else pendingLeave.clear();
+  }, [status, watching, withdrawnNow]); // eslint-disable-line react-hooks/exhaustive-deps
+
   let body;
   if (rules) body = null;
   else if (view === undefined) body = <div className="panel"><p className="muted">Conectando…</p></div>;
@@ -406,8 +490,11 @@ export default function StudentApp() {
     body = (
       <>
         <Me v={v} />
+        {v.me.withdrawn && <Withdrawn me={v.me} />}
+        {watching && <div className="watch-pill" role="status">Modo vigilado · no salgas de esta página</div>}
         {v.phase === "lobby" && (
           <>
+            <FairPlay v={v} />
             <SeatPicker v={v} send={send} />
             <p className="muted" style={{ textAlign: "center" }}>
               {v.me.seat ? "¡Listo! Espera a que el profesor empiece la partida." : "Elige tu asiento para quedar listo."} Hay {v.count} inscritos.
@@ -415,10 +502,11 @@ export default function StudentApp() {
           </>
         )}
         {notice && <div className="notebar">{notice}</div>}
-        {v.clue && ["ready", "timing", "closed", "spinning", "scoring"].includes(v.phase) && <RoundView v={v} send={send} />}
-        {v.phase === "idle" && <Waiting v={v} />}
+        {!v.me.withdrawn && v.clue && ["ready", "timing", "closed", "spinning", "scoring"].includes(v.phase) && <RoundView v={v} send={send} confirm={confirm} />}
+        {v.phase === "idle" && !v.me.withdrawn && <Waiting v={v} />}
         {v.phase === "finished" && <FinishedView v={v} />}
         {error && <div className="warnbar toast" role="alert">{error}</div>}
+        <ConfirmDialog ask={ask} onClose={closeAsk} />
       </>
     );
   }

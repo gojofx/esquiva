@@ -15,6 +15,21 @@ El asiento elegido **no se envía a los celulares** hasta que la ruleta se detie
 
 Si un estudiante cambia de celular o borra el navegador, vuelve a escribir su mismo nombre y el profesor aprueba el nuevo dispositivo.
 
+## Juego limpio: salir de la página cancela la participación
+
+Durante la partida (o solo con pista en pantalla, según se configure), si el celular del estudiante sale de la página, su participación se cancela de inmediato: su asiento sale de la ruleta, su respuesta de la ronda se anula y no puede volver a responder ni intercambiar. El profesor ve un aviso con el motivo y puede **readmitirlo** si fue un error.
+
+| Se detecta | Cómo |
+|---|---|
+| Cambiar de aplicación (p. ej. calculadora), ir al inicio, minimizar el navegador, cambiar de pestaña, bloquear la pantalla | `visibilitychange` (página oculta) |
+| Tocar otra app en pantalla dividida o ventana flotante; usar otra ventana | `blur` (la página pierde el foco) |
+| Poner el navegador en pantalla dividida | la ventana se achica (`resize`), salvo con el teclado abierto |
+| Cerrar o recargar la página | `pagehide` + aviso por `sendBeacon` a `/leave` |
+
+El aviso se envía por el WebSocket y además por `sendBeacon`; si no hay conexión en ese instante, se guarda y se reenvía al reconectar. Para evitar falsos positivos, la página pide que la pantalla no se apague (Wake Lock, requiere HTTPS) y usa ventanas de confirmación propias en vez de `confirm()`.
+
+Límites: un navegador no puede **impedir** salir, solo detectarlo; tampoco puede detectar otro dispositivo (otro celular o una calculadora física). Una llamada entrante o bajar la barra de notificaciones también cuentan como salir: para eso está **Readmitir**. Opciones al crear la partida: vigilancia en toda la partida / solo con pista en pantalla / desactivada, y segundos de tolerancia (0 = inmediato).
+
 ## Instalación en el servidor
 
 Requiere Node.js 18 o superior.

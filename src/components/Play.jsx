@@ -4,6 +4,7 @@ import Wheel from "./Wheel.jsx";
 import ClueText from "./ClueText.jsx";
 import Finished from "./Finished.jsx";
 import Claims from "./Claims.jsx";
+import Incidents from "./Incidents.jsx";
 import { LEVELS } from "../game/clues.js";
 
 function LevelPicker({ state, dispatch }) {
@@ -163,7 +164,7 @@ function Seats({ state, dispatch }) {
   players.forEach((p) => (bySeat[p.seat] = p));
   const occupied = players.map((p) => p.seat).sort((a, b) => a - b);
   const used = (p) => (round ? round.swaps[p.id] || 0 : 0);
-  const canSwap = (p) => p && !p.out && used(p) < config.swapLimit;
+  const canSwap = (p) => p && !p.out && !p.withdrawn && used(p) < config.swapLimit;
   const target = phase === "scoring" ? round.clue.target : null;
   const cands = phase === "scoring" && round.clue.kind === "reduce" ? round.clue.cands : [];
 
@@ -196,7 +197,8 @@ function Seats({ state, dispatch }) {
           const p = bySeat[n];
           const w = weights[n] || 1;
           const k = ["seat"];
-          if (p.out) k.push("out");
+          if (p.withdrawn) k.push("withdrawn");
+          else if (p.out) k.push("out");
           if (w === 2) k.push("w2");
           if (w === 3) k.push("w3");
           if (swapping && !p.out && !canSwap(p) && !sel.includes(n)) k.push("used");
@@ -215,7 +217,9 @@ function Seats({ state, dispatch }) {
             >
               <span className="num">{n}</span>
               <span className="nm">{p.name}</span>
-              <span className="sc">{p.out ? `fuera · ${p.outHits}/${config.pts.returnHits}` : `${p.score} pts`}</span>
+              <span className="sc">
+                {p.withdrawn ? "retirado" : p.out ? `fuera · ${p.outHits}/${config.pts.returnHits}` : `${p.score} pts`}
+              </span>
               {w > 1 && !p.out && <span className="w">×{w}</span>}
               {sel.includes(n) && <span className="ord">{sel.indexOf(n) + 1}</span>}
               {!sel.includes(n) && round && round.subs?.[p.id] && phase !== "scoring" && <span className="sent" title="Ya respondió">✓</span>}
@@ -290,6 +294,7 @@ function Scoring({ state, dispatch }) {
                   <td className="mono">{p.seat}</td>
                   <td>
                     {p.name}
+                    {p.withdrawn && <span className="tag-mini minus">RETIRADO</span>}
                     {p.out && <span className="tag-mini zero">FUERA {p.outHits}/{state.config.pts.returnHits}</span>}
                     {p.seat === target && !p.out && <span className="tag-mini minus">LE CAYÓ</span>}
                   </td>
@@ -301,6 +306,7 @@ function Scoring({ state, dispatch }) {
                           key={o.id}
                           type="button"
                           aria-pressed={r.answer === o.id}
+                          disabled={!!p.withdrawn}
                           onClick={() => dispatch({ type: "SET_ANSWER", id: p.id, answer: o.id })}
                         >
                           {o.label}
@@ -313,7 +319,7 @@ function Scoring({ state, dispatch }) {
                       type="button"
                       className="firstbtn"
                       aria-pressed={ord >= 0}
-                      disabled={p.out}
+                      disabled={p.out || !!p.withdrawn}
                       onClick={() => dispatch({ type: "TOGGLE_FIRST", id: p.id })}
                     >
                       {ord >= 0 ? `${ord + 1}° en declarar` : "Primero"}
@@ -353,8 +359,8 @@ function Scoring({ state, dispatch }) {
 export default function Play({ data, dispatch, resolveClaim }) {
   const { state, offset, claims } = data;
   const { phase, roundNo, config, round, weights } = state;
-  const seats = activeSeats(state);
-  const segments = seats.map((n) => ({ n, weight: weights[n] || 1 }));
+  // Durante una ronda la ruleta queda fija con los asientos que había al elegir (aunque alguien se retire).
+  const segments = round && round.wheel ? round.wheel : activeSeats(state).map((n) => ({ n, weight: weights[n] || 1 }));
   const totalW = segments.reduce((t, s) => t + s.weight, 0);
 
   const reset = () => {
@@ -370,7 +376,8 @@ export default function Play({ data, dispatch, resolveClaim }) {
         <div className="round-no">
           Ronda <span>{current}</span> de {config.rounds}
           <span className="muted" style={{ fontSize: 16, fontWeight: 400, marginLeft: 12, color: "var(--chalk-dim)" }}>
-            {activePlayers(state).length} en juego · {state.players.length - activePlayers(state).length} fuera
+            {activePlayers(state).length} en juego · {state.players.filter((p) => p.out && !p.withdrawn).length} fuera
+            {state.players.some((p) => p.withdrawn) && ` · ${state.players.filter((p) => p.withdrawn).length} retirados`}
           </span>
         </div>
         <div className="btn-row">
@@ -390,6 +397,7 @@ export default function Play({ data, dispatch, resolveClaim }) {
       </div>
 
       <Claims claims={claims} resolveClaim={resolveClaim} />
+      <Incidents state={state} dispatch={dispatch} />
 
       <div className="play-grid">
         <div className="panel">

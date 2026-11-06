@@ -21,7 +21,25 @@ export const DEFAULT_CONFIG = {
   clueType: "mix",
   level: 2,
   lowPolicy: "reintegrate",
+  // Vigilancia del celular: "game" toda la partida, "rounds" solo con pista en pantalla, "off" desactivada.
+  watch: "game",
+  graceSec: 0,
   pts: DEFAULT_POINTS,
+};
+
+// Fases en las que salir de la página cancela la participación.
+export const WATCH_PHASES = {
+  game: ["idle", "ready", "timing", "closed", "spinning", "scoring"],
+  rounds: ["ready", "timing"],
+  off: [],
+};
+export const watchActive = (s) => (WATCH_PHASES[s.config.watch] || []).includes(s.phase);
+
+export const WITHDRAW_REASONS = {
+  hidden: "salió de la página (cambió de aplicación o pestaña, minimizó o bloqueó la pantalla)",
+  blur: "la página perdió el foco (usó otra aplicación o ventana)",
+  split: "usó pantalla dividida o ventana flotante",
+  closed: "cerró o recargó la página",
 };
 
 export const ANSWERS = {
@@ -52,9 +70,10 @@ export const initialState = {
   endReason: null,
   tiebreak: null,
   winnerId: null,
+  incidents: [], // salidas de la página detectadas: { id, playerId, reason, at, roundNo, resolved }
 };
 
-export const activePlayers = (s) => s.players.filter((p) => !p.out);
+export const activePlayers = (s) => s.players.filter((p) => !p.out && !p.withdrawn);
 export const activeSeats = (s) =>
   activePlayers(s)
     .map((p) => p.seat)
@@ -77,7 +96,7 @@ export function scoreRound(s) {
 
   const firstCorrectId = first.find((id) => {
     const p = s.players.find((x) => x.id === id);
-    return p && !p.out && isCorrect(p);
+    return p && !p.out && !p.withdrawn && isCorrect(p);
   });
 
   return s.players.map((p) => {
@@ -85,6 +104,11 @@ export function scoreRound(s) {
     const declared = first.includes(p.id);
     const parts = [];
     let after = { ...p };
+
+    if (p.withdrawn) {
+      parts.push({ txt: "participación cancelada", v: 0 });
+      return { id: p.id, answer: "blank", declared: false, parts, delta: 0, before: p, after, event: null };
+    }
 
     if (p.out) {
       if (isCorrect(p)) {
@@ -145,7 +169,9 @@ export const canSubmit = (s, now = Date.now()) =>
   (s.phase === "ready" || s.phase === "timing") && !!s.round && (!s.round.endsAt || now <= s.round.endsAt + 500);
 
 const swapOpen = (s) => (s.phase === "ready" || s.phase === "timing") && !!s.round;
-export const canMove = (s, p) => !!p && !p.out && (s.round.swaps[p.id] || 0) < s.config.swapLimit;
+export const canMove = (s, p) => !!p && !p.out && !p.withdrawn && (s.round.swaps[p.id] || 0) < s.config.swapLimit;
+// Asientos de la ruleta de esta ronda (fijos desde que se eligió el asiento, aunque alguien se retire).
+export const roundSeats = (s) => (s.round && s.round.wheel ? s.round.wheel.map((w) => w.n) : activeSeats(s));
 
 // Rota a los ocupantes: el de seats[0] pasa a seats[1], ..., el último pasa a seats[0].
 function doSwap(s, seats) {
@@ -173,7 +199,7 @@ function strip(s) {
 function checkLow(s, log) {
   if (activePlayers(s).length >= 3) return s;
   if (s.config.lowPolicy === "end") return { ...s, phase: "finished", endReason: "low" };
-  const back = s.players.filter((p) => p.out).map((p) => p.name);
+  const back = s.players.filter((p) => p.out && !p.withdrawn).map((p) => p.name);
   log.notes.push(`Quedaban menos de 3 asientos activos: vuelven ${back.join(", ")} con ${s.config.pts.returnScore} puntos.`);
   return {
     ...s,
@@ -214,11 +240,52 @@ export function reducer(s, action) {
       return { ...s, players: s.players.filter((p) => p.id !== action.id) };
     case "START_GAME": {
       if (s.phase !== "lobby" || s.players.length < 4 || s.players.some((p) => !p.seat)) return s;
-      const players = s.players.map((p) => ({ ...p, score: s.config.pts.start, out: false, outHits: 0 }));
+      const players = s.players.map((p) => ({ ...p, score: s.config.pts.start, out: false, outHits: 0, withdrawn: null }));
       const weights = {};
       players.forEach((p) => (weights[p.seat] = 1));
       return { ...s, players, weights, seatCount: Math.max(...players.map((p) => p.seat)), phase: "idle" };
     }
+    case "WITHDRAW": {
+      // El celular del estudiante salió de la página: se cancela su participación de inmediato.
+      const p = s.players.find((x) => x.id === action.id);
+      if (!p || p.withdrawn || !watchActive(s)) return s;
+      const reason = WITHDRAW_REASONS[action.reason] ? action.reason : "hidden";
+      const withdrawn = { reason, at: action.at, roundNo: s.roundNo + (s.round ? 1 : 0) };
+      let round = s.round;
+      if (round) {
+        const { [p.id]: _a, ...answers } = round.answers;
+        const { [p.id]: _s, ...subs } = round.subs || {};
+        round = {
+          ...round,
+          answers,
+          subs,
+          first: round.first.filter((id) => id !== p.id),
+          moves: (round.moves || []).filter((m) => m.from !== p.id && m.to !== p.id),
+        };
+      }
+      const incident = { id: action.incidentId, playerId: p.id, name: p.name, reason, at: action.at, roundNo: withdrawn.roundNo, resolved: false };
+      return {
+        ...s,
+        round,
+        players: s.players.map((x) => (x.id === p.id ? { ...x, withdrawn } : x)),
+        incidents: [...(s.incidents || []), incident],
+      };
+    }
+    case "REINSTATE": {
+      // El profesor readmite a quien salió por error (llamada, notificación, etc.).
+      const p = s.players.find((x) => x.id === action.id);
+      if (!p || !p.withdrawn) return s;
+      return {
+        ...s,
+        players: s.players.map((x) => (x.id === p.id ? { ...x, withdrawn: null } : x)),
+        incidents: (s.incidents || []).map((i) => (i.playerId === p.id && !i.resolved ? { ...i, resolved: "readmitido" } : i)),
+      };
+    }
+    case "DISMISS_INCIDENT":
+      return {
+        ...s,
+        incidents: (s.incidents || []).map((i) => (i.id === action.incidentId && !i.resolved ? { ...i, resolved: "confirmado" } : i)),
+      };
     case "RESET":
       return { ...initialState, config: s.config };
     case "CYCLE_WEIGHT": {
@@ -232,7 +299,8 @@ export function reducer(s, action) {
       if (seats.length < 2) return s;
       const target = weightedPick(seats, (n) => s.weights[n] || 1);
       const clue = makeClue(target, seats, s.config.clueType, s.config.level);
-      return { ...s, phase: "ready", round: { clue, swaps: {}, answers: {}, first: [], subs: {}, moves: [], endsAt: null } };
+      const wheel = seats.map((n) => ({ n, weight: s.weights[n] || 1 }));
+      return { ...s, phase: "ready", round: { clue, wheel, swaps: {}, answers: {}, first: [], subs: {}, moves: [], endsAt: null } };
     }
     case "SET_LEVEL": {
       // La dificultad se puede cambiar en medio de la partida: entre rondas, o con la pista
@@ -242,13 +310,12 @@ export function reducer(s, action) {
       if (!["lobby", "idle", "ready"].includes(s.phase)) return s;
       const next = { ...s, config: { ...s.config, level } };
       if (s.phase !== "ready") return next;
-      const clue = makeClue(s.round.clue.target, activeSeats(s), s.config.clueType, level);
+      const clue = makeClue(s.round.clue.target, roundSeats(s), s.config.clueType, level);
       return { ...next, round: { ...s.round, clue } };
     }
     case "REROLL_CLUE": {
       if (s.phase !== "ready") return s;
-      const seats = activeSeats(s);
-      const clue = makeClue(s.round.clue.target, seats, s.config.clueType, s.config.level);
+      const clue = makeClue(s.round.clue.target, roundSeats(s), s.config.clueType, s.config.level);
       return { ...s, round: { ...s.round, clue } };
     }
     case "START_TIMER":
@@ -288,7 +355,7 @@ export function reducer(s, action) {
       // Lo genera el servidor a partir del mensaje de un celular.
       if (!canSubmit(s, action.at)) return s;
       const p = s.players.find((x) => x.id === action.id);
-      if (!p || s.round.subs[p.id]) return s;
+      if (!p || p.withdrawn || s.round.subs[p.id]) return s;
       const sub = { mode: action.mode, nums: action.nums, first: action.first && action.mode !== "blank", at: action.at };
       return { ...s, round: { ...s.round, subs: { ...s.round.subs, [p.id]: sub } } };
     }

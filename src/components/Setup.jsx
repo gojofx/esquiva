@@ -37,6 +37,8 @@ export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripci
       seconds: clamp(c.seconds, 5, 600, 45),
       swapLimit: clamp(c.swapLimit, 0, 10, 1),
       level: clamp(c.level, 1, 5, 2),
+      watch: ["game", "rounds", "off"].includes(c.watch) ? c.watch : "game",
+      graceSec: clamp(c.graceSec, 0, 10, 0),
       pts,
     });
   };
@@ -96,6 +98,19 @@ export default function Setup({ config, onSubmit, submitLabel = "Abrir inscripci
               <option value="reintegrate">Reintegrar a todos</option>
               <option value="end">Terminar la partida</option>
             </select>
+          </div>
+          <div className="field">
+            <label htmlFor="watch">Si un estudiante sale de la página</label>
+            <select id="watch" value={c.watch} onChange={(e) => set("watch", e.target.value)}>
+              <option value="game">Cancelar su participación (toda la partida)</option>
+              <option value="rounds">Cancelar solo si hay pista en pantalla</option>
+              <option value="off">No vigilar</option>
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="grace">Tolerancia al salir (segundos)</label>
+            <input id="grace" type="number" min="0" max="10" value={c.graceSec} disabled={c.watch === "off"} onChange={(e) => set("graceSec", e.target.value)} />
+            <small>0 = se cancela de inmediato</small>
           </div>
         </div>
 

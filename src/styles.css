@@ -396,3 +396,15 @@ details.panel[open] > summary::after { transform: rotate(90deg); }
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }
+
+/* Vigilancia */
+.watch-pill { justify-self: center; font-size: 13px; font-weight: 700; color: var(--green-800); background: var(--green-100); border: 1px solid #c6dccd; border-radius: 999px; padding: 4px 14px; display: inline-flex; align-items: center; gap: 8px; }
+.watch-pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #3fae68; box-shadow: 0 0 0 3px rgba(63,174,104,.2); }
+.panel.fair { border-color: #efdfbd; background: linear-gradient(180deg, #fffaf0, var(--gold-50)); }
+.panel.withdrawn { border-color: #efc6b9; background: var(--danger-50); }
+.seat.withdrawn { border-style: dashed; border-color: var(--danger); background: var(--danger-50); opacity: .8; }
+.seat.withdrawn .sc { color: var(--danger); }
+.modal-back { position: fixed; inset: 0; z-index: 50; background: rgba(10, 44, 33, .45); display: grid; place-items: center; padding: 20px; }
+.modal { background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow-lg); padding: 20px; max-width: 420px; width: 100%; display: grid; gap: 16px; font-size: 16px; }
+.incident { background: var(--danger-50); border: 1px solid #efc6b9; color: #6d2716; border-radius: 12px; padding: 10px 14px; font-size: 14.5px; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.incident b { color: var(--danger); }

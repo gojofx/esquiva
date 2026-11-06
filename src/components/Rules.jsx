@@ -228,6 +228,8 @@ export default function Rules({ pts, onPlay }) {
               <p>Con 1 o 2 asientos activos el resultado se vuelve obvio. El profesor decide al inicio qué se hace en ese caso: <b>terminar la partida</b> o <b>reintegrar a todos</b> los que estén fuera con {pts.returnScore} puntos.</p></div>
             <div className="card"><span className="tag">EMPATE</span><h3>Pista final rápida</h3>
               <p>Si al terminar las N rondas hay empate en el primer lugar, se da una pista de desempate y gana el primero en resolverla bien.</p></div>
+            <div className="card warn"><span className="tag">JUEGO LIMPIO</span><h3>No se sale de la página</h3>
+              <p>Durante la partida el celular no puede salir del juego. Cambiar de aplicación (por ejemplo, a la calculadora), minimizar el navegador, cambiar de pestaña, bloquear la pantalla o usar pantalla dividida <b>cancela la participación de inmediato</b>: el asiento sale de la ruleta y no se puede volver a responder. Si fue un error, el profesor puede readmitir.</p></div>
             <div className="card"><span className="tag">ACIERTA Y LE CAE</span><h3>Acertó, pero estaba en el asiento</h3>
               <p>No recibe los puntos del acierto y pierde {pts.hit}. Si sabía que caía su asiento, debió intercambiar.</p></div>
           </div>

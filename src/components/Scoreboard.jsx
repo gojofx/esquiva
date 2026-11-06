@@ -30,8 +30,8 @@ export default function Scoreboard({ state }) {
                 <td>{p.name}</td>
                 <td className="mono">{p.seat}</td>
                 <td className="mono">{p.score}</td>
-                <td className={p.out ? "minus" : "plus"}>
-                  {p.out ? `fuera · ${p.outHits}/${state.config.pts.returnHits} aciertos para volver` : "en juego"}
+                <td className={p.out || p.withdrawn ? "minus" : "plus"}>
+                  {p.withdrawn ? "retirado (salió de la página)" : p.out ? `fuera · ${p.outHits}/${state.config.pts.returnHits} aciertos para volver` : "en juego"}
                 </td>
               </tr>
             ))}

@@ -93,7 +93,7 @@ export default function Finished({ state, dispatch, onReset }) {
                 <td>{p.name}</td>
                 <td className="mono">{p.seat}</td>
                 <td className="mono">{p.score}</td>
-                <td className={p.out ? "minus" : "plus"}>{p.out ? "fuera" : "en juego"}</td>
+                <td className={p.out || p.withdrawn ? "minus" : "plus"}>{p.withdrawn ? "retirado" : p.out ? "fuera" : "en juego"}</td>
               </tr>
             ))}
           </tbody>

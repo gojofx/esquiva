@@ -7,7 +7,7 @@ import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { WebSocketServer } from "ws";
 import { createStorage } from "./storage.js";
-import { reducer, initialState, DEFAULT_CONFIG, DEFAULT_POINTS, cleanName, sameName, canSubmit, scoreRound, canMove } from "../src/game/engine.js";
+import { reducer, initialState, DEFAULT_CONFIG, DEFAULT_POINTS, cleanName, sameName, canSubmit, scoreRound, canMove, watchActive } from "../src/game/engine.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Variables de entorno desde .env (si existe), sin dependencias.
@@ -96,6 +96,7 @@ function studentView(playerId) {
     swapLimit: s.config.swapLimit,
     me,
     count: s.players.length,
+    watch: { mode: s.config.watch, grace: s.config.graceSec, active: watchActive(s) },
   };
   if (!me) return base;
   if (s.phase === "lobby") {
@@ -143,7 +144,7 @@ function studentView(playerId) {
     base.last = { roundNo: last.roundNo, clue: last.clue, result: r || null };
   }
   if (s.phase === "finished") {
-    base.ranking = ranked.map((p) => ({ name: p.name, score: p.score, out: p.out, me: p.id === me.id }));
+    base.ranking = ranked.map((p) => ({ name: p.name, score: p.score, out: p.out, withdrawn: !!p.withdrawn, me: p.id === me.id }));
     base.winner = s.winnerId ? s.players.find((p) => p.id === s.winnerId)?.name : null;
   }
   return base;
@@ -191,7 +192,7 @@ if (state.phase === "timing") apply({ type: "CLOSE" });
 const TEACHER_ACTIONS = new Set([
   "OPEN_LOBBY", "SET_CONFIG", "ADD_MANUAL", "SET_SEAT", "REMOVE_PLAYER", "START_GAME", "RESET", "CYCLE_WEIGHT",
   "NEW_ROUND", "REROLL_CLUE", "SET_LEVEL", "START_TIMER", "CLOSE", "SWAP", "SPIN", "SPIN_DONE", "SET_ANSWER", "TOGGLE_FIRST",
-  "APPLY", "UNDO", "FINISH_NOW", "TIEBREAK", "TIEBREAK_SOLVE", "SET_WINNER",
+  "APPLY", "UNDO", "FINISH_NOW", "REINSTATE", "DISMISS_INCIDENT", "TIEBREAK", "TIEBREAK_SOLVE", "SET_WINNER",
 ]);
 
 function newToken(playerId) {
@@ -226,6 +227,17 @@ function onStudentRegister(ws, rawName) {
   apply({ type: "REGISTER", name });
   const p = state.players.find((x) => sameName(x.name, name));
   if (p) link(ws, p.id);
+}
+
+// El celular avisó que salió de la página (por WebSocket o por sendBeacon).
+function withdraw(playerId, reason) {
+  if (!playerId) return false;
+  const ok = apply({ type: "WITHDRAW", id: playerId, reason: String(reason || ""), at: Date.now(), incidentId: crypto.randomUUID() });
+  if (ok) {
+    const p = state.players.find((x) => x.id === playerId);
+    console.log(`[vigilancia] ${p?.name} (${reason}): participación cancelada`);
+  }
+  return ok;
 }
 
 function onSubmit(ws, msg) {
@@ -300,6 +312,7 @@ function onMessage(ws, raw) {
       const ok = apply({ type: "MOVE_REQUEST", from: ws.playerId, toSeat: msg.seat, reqId: crypto.randomUUID(), at: Date.now() });
       if (!ok) send(ws, { t: "error", msg: "No se puede pedir ese cambio (tiempo cerrado o sin intercambios disponibles)." });
     }
+    if (msg.t === "leave") withdraw(ws.playerId, msg.reason);
     if (msg.t === "move-cancel") apply({ type: "MOVE_CANCEL", from: ws.playerId });
     if (msg.t === "move-answer") {
       const ok = apply({ type: "MOVE_ANSWER", to: ws.playerId, reqId: String(msg.id || ""), accept: !!msg.accept });
@@ -316,6 +329,24 @@ const MIME = {
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://x");
+  if (req.method === "POST" && url.pathname.endsWith("/leave")) {
+    // Respaldo de navigator.sendBeacon: llega aunque la página se esté cerrando o pasando a segundo plano.
+    let body = "";
+    req.on("data", (c) => {
+      body += c;
+      if (body.length > 2048) req.destroy();
+    });
+    req.on("end", () => {
+      try {
+        const { token, reason } = JSON.parse(body);
+        withdraw(tokens.get(String(token || "")), reason);
+      } catch {
+        /* cuerpo inválido */
+      }
+      res.writeHead(204).end();
+    });
+    return;
+  }
   let file = path.normalize(path.join(DIST, decodeURIComponent(url.pathname)));
   if (!file.startsWith(DIST)) {
     res.writeHead(403).end();
