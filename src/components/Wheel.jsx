@@ -1,7 +1,13 @@
 import { useEffect, useRef } from "react";
 
-const SEG = ["#2c5a4b", "#24493e", "#3a6b5a", "#1f4236"];
+const SEG = ["#134a36", "#1d5a43", "#0f3d2e", "#236548"];
 const TAU = 2 * Math.PI;
+const gold = (ctx, size) => {
+  const g = ctx.createLinearGradient(-size / 2, -size / 2, size / 2, size / 2);
+  g.addColorStop(0, "#f6d27a");
+  g.addColorStop(1, "#c98f22");
+  return g;
+};
 
 // segments: [{ n, weight }] en el orden en que se dibujan.
 // spinTo: número de asiento al que debe llegar (null = quieta). onDone se llama al terminar.
@@ -41,33 +47,39 @@ export default function Wheel({ segments, hit, spinTo, onDone }) {
       ctx.moveTo(0, 0);
       ctx.arc(0, 0, R, s.start - Math.PI / 2, s.end - Math.PI / 2);
       ctx.closePath();
-      ctx.fillStyle = isHit ? "#f29a8e" : s.weight === 3 ? "#5f6b38" : s.weight === 2 ? "#4a6a40" : SEG[i % SEG.length];
+      ctx.fillStyle = isHit ? gold(ctx, R) : s.weight === 3 ? "#5c6a2c" : s.weight === 2 ? "#3f6a3b" : SEG[i % SEG.length];
       ctx.fill();
-      ctx.strokeStyle = "rgba(243,239,228,0.35)";
+      ctx.strokeStyle = "rgba(243,205,109,0.45)";
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.save();
       ctx.rotate((s.start + s.end) / 2);
       const fs = segs.length > 30 ? 22 : segs.length > 18 ? 28 : 38;
       ctx.font = `700 ${fs}px 'JetBrains Mono', monospace`;
-      ctx.fillStyle = isHit ? "#142a23" : "#f3efe4";
+      ctx.fillStyle = isHit ? "#0a2c21" : "#fffdf8";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.fillText(String(s.n), 0, -R * 0.8);
       ctx.restore();
     });
     ctx.restore();
+    // centro y aro dorado
     ctx.beginPath();
-    ctx.arc(c, c, 48, 0, TAU);
-    ctx.fillStyle = "#142a23";
+    ctx.arc(c, c, 54, 0, TAU);
+    ctx.fillStyle = "#0f3d2e";
     ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = "#f5d15a";
+    ctx.lineWidth = 7;
+    ctx.strokeStyle = gold(ctx, W);
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(c, c, R, 0, TAU);
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = "rgba(243,239,228,0.5)";
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = gold(ctx, W);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(c, c, R - 9, 0, TAU);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = "rgba(10,44,33,0.35)";
     ctx.stroke();
   };
 

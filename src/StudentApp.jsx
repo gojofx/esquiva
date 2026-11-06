@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSocket, store } from "./net.js";
+import { Brand, Logo } from "./components/Icons.jsx";
 import ClueText from "./components/ClueText.jsx";
 import Rules from "./components/Rules.jsx";
 import { DEFAULT_POINTS } from "./game/engine.js";
@@ -208,8 +209,13 @@ function SwapPanel({ v, send }) {
       ))}
       {canAsk && (
         <details className="panel" open={!!outgoing}>
-          <summary style={{ cursor: "pointer", fontFamily: "var(--font-display)", fontWeight: 600 }}>
-            ¿A qué asiento te vas a pasar? <span className="muted" style={{ fontWeight: 400 }}>(te quedan {swapsLeft})</span>
+          <summary style={{ cursor: "pointer" }}>
+            <span>
+              <b style={{ fontFamily: "var(--font-display)", fontWeight: 600, fontSize: 18 }}>¿A qué asiento te vas a pasar?</b>
+              <small className="muted" style={{ display: "block", fontSize: 14 }}>
+                {swapsLeft === 1 ? "Te queda 1 intercambio en esta ronda" : `Te quedan ${swapsLeft} intercambios en esta ronda`}
+              </small>
+            </span>
           </summary>
           {outgoing ? (
             <div className="notebar" style={{ marginTop: 10 }}>
@@ -418,7 +424,7 @@ export default function StudentApp() {
     <>
       <nav className="topbar">
         <div className="wrap">
-          <div className="brand">Ruleta de <span>Asientos</span></div>
+          <Brand />
           <span className={"conn " + status}>{status === "online" ? "conectado" : status === "connecting" ? "conectando…" : "sin conexión"}</span>
           <div className="tabs">
             <button type="button" aria-current={rules ? "page" : undefined} onClick={() => setRules(!rules)}>
@@ -432,6 +438,12 @@ export default function StudentApp() {
       ) : (
         <main className="st">{body}</main>
       )}
+      <footer className="site">
+        <div className="wrap">
+          <Logo size={26} />
+          <span>Juego, estrategia y matemáticas</span>
+        </div>
+      </footer>
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import { useSocket, store } from "./net.js";
+import { Brand, Logo } from "./components/Icons.jsx";
 import Rules from "./components/Rules.jsx";
 import Setup from "./components/Setup.jsx";
 import Lobby from "./components/Lobby.jsx";
@@ -94,9 +95,7 @@ export default function TeacherApp() {
     <>
       <nav className="topbar" aria-label="Secciones">
         <div className="wrap">
-          <div className="brand">
-            Ruleta de <span>Asientos</span>
-          </div>
+          <Brand />
           <span className={"conn " + status}>{status === "online" ? "conectado" : status === "connecting" ? "conectando…" : "sin conexión"}</span>
           <div className="tabs">
             {TABS.map((t) => (
@@ -127,9 +126,12 @@ export default function TeacherApp() {
         </>
       )}
 
-      <footer>
+      <footer className="site">
         <div className="wrap">
-          Ruleta de Asientos · pantalla del profesor. La partida se guarda en el servidor: si se cierra esta pestaña, al volver continúa donde iba.
+          <Logo size={30} />
+          <b>Ruleta de Asientos</b>
+          <span className="sep" />
+          <span>Juego, estrategia y matemáticas · La partida se guarda en el servidor: si cierras esta pestaña, continúa donde iba.</span>
         </div>
       </footer>
     </>

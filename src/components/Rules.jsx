@@ -1,27 +1,4 @@
-const CAND = [12, 15, 18, 21, 24];
-
-function MiniClass() {
-  return (
-    <div className="mini-class" aria-label="Ejemplo de salón con 24 asientos">
-      <div className="front">tablero</div>
-      <div className="mini-grid">
-        {Array.from({ length: 24 }, (_, i) => i + 1).map((n) => (
-          <div
-            key={n}
-            className={"mini-seat" + (n === 18 ? " hit" : CAND.includes(n) ? " cand" : n === 7 || n === 20 ? " out" : "")}
-          >
-            {n}
-          </div>
-        ))}
-      </div>
-      <div className="mini-legend">
-        <span><span className="dot" style={{ background: "var(--red)" }} />Asiento que cae</span>
-        <span><span className="dot" style={{ border: "1.5px solid var(--yellow)" }} />Posibles según la pista</span>
-        <span><span className="dot" style={{ border: "1.5px dashed var(--chalk-dim)" }} />Jugador fuera</span>
-      </div>
-    </div>
-  );
-}
+import Icon, { SeatsIllustration } from "./Icons.jsx";
 
 export default function Rules({ pts, onPlay }) {
   const s = (n) => (n > 0 ? `+${n}` : `${n}`);
@@ -31,28 +8,41 @@ export default function Rules({ pts, onPlay }) {
         <div className="wrap hero-grid">
           <div>
             <div className="kicker">Juego de matemáticas para el salón</div>
-            <h1>Ruleta de Asientos</h1>
+            <h1>
+              Ruleta de <span className="gold">Asientos</span>
+            </h1>
             <p className="lead">
               Una ruleta escoge un asiento antes de girar. Una pista matemática dice cuál puede ser. Quien la resuelve gana puntos y puede
               cambiarse de puesto para no quedar en el asiento que va a caer.
             </p>
+            <div className="btn-row" style={{ marginTop: 24 }}>
+              <button className="btn" type="button" onClick={onPlay}>
+                <Icon name="play" size={18} /> Comenzar juego
+              </button>
+            </div>
             <div className="facts">
               <span className="chip">Se juega por <b>puntos</b></span>
               <span className="chip"><b>N rondas</b> definidas al inicio</span>
               <span className="chip">Todos empiezan con <b>{pts.start} puntos</b></span>
               <span className="chip">Gana quien tenga <b>más puntos</b></span>
             </div>
-            <div className="btn-row" style={{ marginTop: 22 }}>
-              <button className="btn" type="button" onClick={onPlay}>Ir a jugar</button>
-            </div>
           </div>
-          <MiniClass />
+          <SeatsIllustration />
         </div>
       </header>
 
+      <div className="wrap">
+        <div className="steps" aria-label="Pasos para jugar">
+          <div className="step"><span className="n">1</span><span>Inscríbete con<br />tu nombre</span></div>
+          <div className="step"><span className="n">2</span><span>Elige el asiento<br />donde estás</span></div>
+          <div className="step"><span className="n">3</span><span>Resuelve la pista<br />y responde</span></div>
+          <div className="step go"><span className="n"><Icon name="star" size={17} strokeWidth={2.2} /></span><span>¡A jugar!</span></div>
+        </div>
+      </div>
+
       <main className="wrap">
         <section id="preparacion">
-          <div className="sec-head"><h2>Antes de empezar</h2><span className="hand">lo que el profesor define una sola vez</span></div>
+          <div className="sec-head"><span className="sec-ico"><Icon name="users" size={26} /></span><h2>Antes de empezar</h2><span className="hand">lo que el profesor define una sola vez</span></div>
           <div className="cards">
             <div className="card">
               <span className="tag">ASIENTOS</span>
@@ -83,7 +73,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="ronda">
-          <div className="sec-head"><h2>Cómo es una ronda</h2><span className="hand">seis pasos que se repiten N veces</span></div>
+          <div className="sec-head"><span className="sec-ico"><Icon name="wheel" size={26} /></span><h2>Cómo es una ronda</h2><span className="hand">seis pasos que se repiten N veces</span></div>
           <ol className="timeline">
             <li><div>
               <span className="who">SISTEMA</span>
@@ -120,7 +110,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="pistas">
-          <div className="sec-head"><h2>Las pistas</h2><span className="hand">dos tipos, distinto riesgo</span></div>
+          <div className="sec-head"><span className="sec-ico gold"><Icon name="bulb" size={26} /></span><h2>Las pistas</h2><span className="hand">dos tipos, distinto riesgo</span></div>
           <div className="clue-row">
             <div className="chalk-box">
               <span className="pill y">PISTA EXACTA · {s(pts.exact)}</span>
@@ -150,7 +140,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="intercambios">
-          <div className="sec-head"><h2>Intercambios de asiento</h2><span className="hand">la defensa del que resolvió la pista</span></div>
+          <div className="sec-head"><span className="sec-ico"><Icon name="swap" size={26} /></span><h2>Intercambios de asiento</h2><span className="hand">la defensa del que resolvió la pista</span></div>
           <div className="cards">
             <div className="card good"><span className="tag">SE PUEDE</span><h3>Intercambiar entre 2 o más</h3>
               <p>Dos estudiantes se cambian de puesto, o tres o más rotan entre ellos. Así ningún asiento queda vacío.</p></div>
@@ -166,7 +156,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="hoja">
-          <div className="sec-head"><h2>La hoja de respuestas</h2><span className="hand">lo escrito queda escrito</span></div>
+          <div className="sec-head"><span className="sec-ico"><Icon name="sheet" size={26} /></span><h2>La hoja de respuestas</h2><span className="hand">lo escrito queda escrito</span></div>
           <div className="clue-row">
             <div className="sheet" aria-label="Ejemplo de hoja de respuestas">
               <h3>Hoja de Valentina · asiento inicial 9</h3>
@@ -195,7 +185,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="puntos">
-          <div className="sec-head"><h2>Tabla de puntos</h2><span className="hand">se ajustan al crear la partida</span></div>
+          <div className="sec-head"><span className="sec-ico gold"><Icon name="trophy" size={26} /></span><h2>Tabla de puntos</h2><span className="hand">se ajustan al crear la partida</span></div>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Situación</th><th>Puntos</th><th>Nota</th></tr></thead>
@@ -217,7 +207,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="fuera">
-          <div className="sec-head"><h2>Fuera del juego y regreso</h2><span className="hand">nadie se queda sin jugar</span></div>
+          <div className="sec-head"><span className="sec-ico"><Icon name="door" size={26} /></span><h2>Fuera del juego y regreso</h2><span className="hand">nadie se queda sin jugar</span></div>
           <div className="flow">
             <div className="card warn"><span className="tag">1 · QUEDA FUERA</span><h3>Puntaje menor que 0</h3>
               <p>Sigue sentado en su asiento, pero ese número <b>sale de la ruleta</b>. No puede moverse ni intercambiar con nadie.</p></div>
@@ -231,7 +221,7 @@ export default function Rules({ pts, onPlay }) {
         </section>
 
         <section id="especiales">
-          <div className="sec-head"><h2>Casos especiales</h2></div>
+          <div className="sec-head"><span className="sec-ico gold"><Icon name="star" size={26} /></span><h2>Casos especiales</h2></div>
           <div className="cards">
             <div className="card"><span className="tag">POCOS ASIENTOS ACTIVOS</span><h3>Si quedan menos de 3 en la ruleta</h3>
               <p>Con 1 o 2 asientos activos el resultado se vuelve obvio. El profesor decide al inicio qué se hace en ese caso: <b>terminar la partida</b> o <b>reintegrar a todos</b> los que estén fuera con {pts.returnScore} puntos.</p></div>
